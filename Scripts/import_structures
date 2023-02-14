@@ -1,0 +1,44 @@
+import bpy 
+
+import pydicom 
+
+
+filepath = r"PATH_TO_STRUCTURE"
+
+dicom_data = pydicom.dcmread(filepath) 
+
+
+# Extract the contour data from the structure file 
+
+contours = [] 
+structure_name = []
+for i,structure in enumerate(dicom_data.ROIContourSequence): 
+    points = [] 
+    structure_name.append(dicom_data.StructureSetROISequence[i].ROIName)
+    for contour in structure.ContourSequence: 
+
+        
+
+        for i in range(0, len(contour.ContourData), 3): 
+
+            x = contour.ContourData[i+1]/100
+
+            y = contour.ContourData[i]/100
+
+            z = contour.ContourData[i+2]/100 
+
+            points.append((x, y, z)) 
+
+    contours.append(points) 
+
+
+# Convert the contours into mesh objects 
+
+for j,contour in enumerate(contours):  
+
+    mesh = bpy.data.meshes.new(name="DICOM Structure") 
+
+    mesh.from_pydata(contour, [], []) 
+
+    object = bpy.data.objects.new(structure_name[j], mesh)
+    bpy.context.collection.objects.link(object)
