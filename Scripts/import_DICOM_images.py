@@ -74,4 +74,4 @@ bpy.ops.object.volume_import(filepath=dir_path + "CT.vdb", files=[])
 
 # Set the volume's origin to match the DICOM image position
 print(origin)
-bpy.context.object.location = origin/1000
+#py.context.object.location = origin/1000
