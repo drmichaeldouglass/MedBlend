@@ -2,18 +2,33 @@ import bpy
 import pydicom
 import os
 import numpy as np
+from pathlib import Path
+
 
 #Directory containing DICOM images
-DICOM_dir = r"PATH_TO_DOSE"
+DICOM_dir = r"D:\Test Files\RD1.2.752.243.1.1.20230109113526074.1850.51250.dcm"
+
+file_path = Path(DICOM_dir)
+root_dir = file_path.parents[0]
 
 # Load the DICOM dataset
 ds = pydicom.read_file(DICOM_dir) 
 
+referenced_plan_file_UID = ds.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID
+
+plan_file_name = root_dir.joinpath('RP' + referenced_plan_file_UID + '.dcm')
+
+try:
+    #loads matching plan if possible (not used yet)
+    ds_plan = pydicom.read_file(plan_file_name)
+except:
+    print('No Plan File')
+    
 
 #Get the Dose Grid
 pixel_data = ds.pixel_array 
 
-dose_resolution = [ds.PixelSpacing[0]/100, ds.PixelSpacing[1]/100, ds.SliceThickness/100] 
+dose_resolution = [ds.PixelSpacing[0]/1000, ds.PixelSpacing[1]/1000, ds.SliceThickness/1000] 
 
 #CT origin coordinates
 origin = np.asarray(ds.ImagePositionPatient)
@@ -32,18 +47,17 @@ grid.copyFromArray(dose_matrix.astype(float))
 
 #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
 grid.transform = openvdb.createLinearTransform([[dose_resolution[2], 0, 0, 0], [0, dose_resolution[0], 0, 0], [0,0,dose_resolution[1],0], [0,0,0,1]])
-grid.transform.translate = (10,1,3)
 #Sets the grid class to FOG_VOLUME
 grid.gridClass = openvdb.GridClass.FOG_VOLUME
 #Blender needs grid name to be "Density"
 grid.name='density'
 
-dose_dir = [DICOM_dir + '/dose.vdb'] 
+dose_dir = root_dir.joinpath('dose.vdb')
 #Writes CT volume to a vdb file but perhaps this could be done internally in the future
-openvdb.write(dose_dir,grid)
+openvdb.write(str(dose_dir),grid)
 
 # Add the volume to the scene
-bpy.ops.object.volume_import(filepath=dose_dir, files=[])
+bpy.ops.object.volume_import(filepath=str(dose_dir), files=[])
 
 # Set the volume's origin to match the DICOM image position
-#bpy.context.object.location = origin/100
+bpy.context.object.location = origin/1000
