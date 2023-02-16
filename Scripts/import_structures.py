@@ -3,7 +3,7 @@ import bpy
 import pydicom 
 
 
-filepath = r"D:\Test Files\RS1.2.752.243.1.1.20230109113525642.1810.76676.dcm"
+filepath = struct_dir
 
 dicom_data = pydicom.dcmread(filepath) 
 
