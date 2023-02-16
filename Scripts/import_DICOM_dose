@@ -60,4 +60,4 @@ openvdb.write(str(dose_dir),grid)
 bpy.ops.object.volume_import(filepath=str(dose_dir), files=[])
 
 # Set the volume's origin to match the DICOM image position
-bpy.context.object.location = origin/1000
+#bpy.context.object.location = origin/1000
