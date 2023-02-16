@@ -4,36 +4,30 @@ import os
 import numpy as np
 from pathlib import Path
 
-#Directory containing DICOM images
-dir_path = r"D:\Test Files\CT"
-
-##Finds all files with .dcm extension
-#image_files = [f for f in os.listdir(DICOM_dir) if f.endswith('.dcm')]
-
-
 dicom_series_id = []
 dicom_set = []
 dicom_instance_number = []
 slice_position = []
-for root, _, filenames in os.walk(dir_path):
-    for filename in filenames:
-        dcm_path = Path(root, filename)
-        try:
-            dicom = pydicom.dcmread(dcm_path, force=True)
-            
-        except IOError as e:
-            print(f"Can't import {dcm_path.stem}")
-        else:
-            dicom_set.append(dicom.pixel_array)
-            dicom_series_id.append(dicom.SeriesInstanceUID)
-            dicom_instance_number.append(dicom.InstanceNumber)
-            #Pixel spacing in X,Y direction
-            spacing = dicom.PixelSpacing
+dir_path = Path(Dicom_Files[0])
+dir_path = dir_path.parents[0]
+for file in Dicom_Files:
+    
+    try:
+        dicom = pydicom.dcmread(file, force=True)
+        
+    except IOError as e:
+        print(f"Can't import DICOM file")
+    else:
+        dicom_set.append(dicom.pixel_array)
+        dicom_series_id.append(dicom.SeriesInstanceUID)
+        dicom_instance_number.append(dicom.InstanceNumber)
+        #Pixel spacing in X,Y direction
+        spacing = dicom.PixelSpacing
 
-            #CT origin coordinates
-            slice_position.append(dicom.ImagePositionPatient)
-            slice_spacing = dicom.SliceThickness
-            image_planes = dicom_set/np.max(dicom_set)
+        #CT origin coordinates
+        slice_position.append(dicom.ImagePositionPatient)
+        slice_spacing = dicom.SliceThickness
+        image_planes = dicom_set/np.max(dicom_set)
 
 
 num_series = len(np.unique(dicom_series_id))
@@ -67,10 +61,10 @@ grid.gridClass = openvdb.GridClass.FOG_VOLUME
 grid.name='density'
 
 #Writes CT volume to a vdb file but perhaps this could be done internally in the future
-openvdb.write(dir_path + "CT.vdb",grid)
+openvdb.write(str(dir_path.joinpath("CT.vdb")),grid)
 
 # Add the volume to the scene
-bpy.ops.object.volume_import(filepath=dir_path + "CT.vdb", files=[])
+bpy.ops.object.volume_import(filepath=str(dir_path.joinpath("CT.vdb")), files=[])
 
 # Set the volume's origin to match the DICOM image position
 print(origin)
