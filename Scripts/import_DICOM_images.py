@@ -2,70 +2,40 @@ import bpy
 import pydicom
 import os
 import numpy as np
+from pathlib import Path
 
 #Directory containing DICOM images
-DICOM_dir = r"PATH_TO_DICOM_FILES"
+dir_path = r"D:/Test Files/CT"
 
 ##Finds all files with .dcm extension
 #image_files = [f for f in os.listdir(DICOM_dir) if f.endswith('.dcm')]
 
 
-#Consider saving the DICOM images during the sorting loop to save time reading them in again
-def get_dicom_file_paths(directory):
-    file_paths = []
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.endswith(".dcm"):
-                file_paths.append(os.path.join(root, file))
-    return file_paths
-
-def sort_dicom_files(file_paths):
-    return sorted(file_paths, key=lambda x: pydicom.dcmread(x).InstanceNumber)
-
-dicom_file_paths = get_dicom_file_paths(DICOM_dir)
-image_files = sort_dicom_files(dicom_file_paths)
 
 
+dicom_set = []
+for root, _, filenames in os.walk(dir_path):
+    for filename in filenames:
+        dcm_path = Path(root, filename)
+        #if dcm_path.suffix == ".dcm":
+        try:
+            dicom = pydicom.dcmread(dcm_path, force=True)
+            
+        except IOError as e:
+            print(f"Can't import {dcm_path.stem}")
+        else:
+            dicom_set.append(dicom.pixel_array)
+
+dicom_set = np.asarray(dicom_set)
 
 
+#Pixel spacing in X,Y direction
+spacing = dicom.PixelSpacing
 
-#creates an empty array to hold CT image slices
-image_planes = []
-
-
-for image_file in image_files:
-    
-    # Load the DICOM dataset
-    ds = pydicom.read_file(image_file) 
-    
-    if (ds.Modality != 'CT'):
-        continue
-    
-    # Extract the pixel data and metadata
-    pixel_data = ds.pixel_array
-    
-    #Pixel spacing in X,Y direction
-    spacing = ds.PixelSpacing
-    
-    #CT origin coordinates
-    origin = np.asarray(ds.ImagePositionPatient)
-    
-    #Adds current CT slice to image volume
-    image_planes.append(pixel_data)
-
-#Gets total number of CT slices
-num_slices = len(image_planes)
-
-#Gets the slice thickness
-slice_spacing = ds.SliceThickness
-
-#Converts slice spacing from string to float
-slice_spacing = np.asarray(slice_spacing)
-
-#Converts list to numpy array
-image_planes = np.asarray(image_planes)
-#Normalises the image volume in range 0,1
-image_planes = image_planes/np.max(image_planes)
+#CT origin coordinates
+origin = np.asarray(dicom.ImagePositionPatient)
+slice_spacing = dicom.SliceThickness
+image_planes = dicom_set/np.max(dicom_set)
 
 
 
@@ -86,10 +56,10 @@ grid.gridClass = openvdb.GridClass.FOG_VOLUME
 grid.name='density'
 
 #Writes CT volume to a vdb file but perhaps this could be done internally in the future
-openvdb.write(DICOM_dir + "CT.vdb",grid)
+openvdb.write(dir_path + "CT.vdb",grid)
 
 # Add the volume to the scene
-bpy.ops.object.volume_import(filepath=DICOM_dir + "CT.vdb", files=[])
+bpy.ops.object.volume_import(filepath=dir_path + "CT.vdb", files=[])
 
 # Set the volume's origin to match the DICOM image position
 print(origin)
