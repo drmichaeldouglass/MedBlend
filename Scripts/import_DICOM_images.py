@@ -14,6 +14,7 @@ for file in Dicom_Files:
     
     try:
         dicom = pydicom.dcmread(file, force=True)
+        #TODO: NEED TO CHECK IF DICOM IS IMAGE TYPE (NOT PLAN, DOSE STRUCTURES)
         
     except IOError as e:
         print(f"Can't import DICOM file")

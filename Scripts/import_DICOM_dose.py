@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 #Directory containing DICOM images
-DICOM_dir = r"Rando Test Files\RD1.2.752.243.1.1.20230109113526074.1850.51250.dcm"
+DICOM_dir = dose_dir
 
 file_path = Path(DICOM_dir)
 root_dir = file_path.parents[0]
