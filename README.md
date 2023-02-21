@@ -1,7 +1,6 @@
 # MedBlend
 A Medical Visualisation Add-On for Blender
-
-## This project is still in development. The code provided here is still being developed and has not been tested or optimised yet.
+### (This project is still in development. The code provided here is still being developed and has not been optimised yet)
 
 ## Introduction
 
@@ -34,33 +33,39 @@ Open Blender 3.5 and from the Edit-->Preferences menu. Select "Add-ons". Then pr
 Once installed, under the preferences for this add-on, select "Install Python Modules". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
 
 
+![Install_2](https://user-images.githubusercontent.com/52724915/220255502-0530ca5d-0d55-4f21-8b74-050b8879abd0.PNG)
 
 ## How to use BlenderRT
 
+Once installed, open the 3D viewport and select the MedBlend category from the sidebar. Press N on the keyboard if it is not visible. 
+![Install_3](https://user-images.githubusercontent.com/52724915/220255514-08a69a10-a520-4d10-a956-4c79fdacdc95.PNG)
+
+MedBlend currently has 3 Load functions: Load DICOM images, Load DICOM Dose and Load DICOM structures. Each of these functions imports a specific DICOM medical file. 
+
+Load DICOM Images, will allow you to select multiple DICOM image slices from a specified folder. These image slices will be imported and converted to a volume object which can be rendered in Blender. Upon sucessfully importing the images, Blender will automatically add a material to this object. This material can be made brighter by increasing the value on the math node in the shader editor window.
 
 
+Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. This add-on will automatically create a material for the volume once imported. This material can be made brighter by increasing the value on the math node in the shader editor window.
+
+Finally, Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system and import each structure as a separate point cloud. 
+
+## Known Issues
+-Not tested on MRI, SPECT, PET or other imaging modalities.
+-CT, Dose and Structure locations are not co-registered yet (user needs to manually align them at the moment).
+
+Please report any bugs as an issue on this repository
 
 
-# (In Progress)
-
-### Import CT or MRI Data
-
-BlenderRT allows you to import radiation therapy or diagnostic medical image files (CT or MRI) in their native DICOM format. The images are imported and displayed as a volume object in Blender which allows for efficient and easily customisable rendering. 
-
-### Import Radiation Therapy Dose Volumes
-
-Simmiarly, BlenderRT can also import DICOM dose files and display them in Blender as a volume object. 
-
-### Import Radiation Therapy Structure Files
-
-Stores DICOM structure fils as point cloud and then solidifies the mesh using geometry nodes (also has STL exported WIP)
+## Future Updates
 
 ### Import Radaition Therapy Plan Files
 
 Linac or Proton Spot DICOM plan files
 (In Progress)
 
-### Brachytherapy Dwell Points
+### Import Brachytherapy Dwell Points
+
+### Treatment simulation with Linac model.
 
 (In Progress)
 
