@@ -50,8 +50,8 @@ Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from
 Finally, Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system and import each structure as a separate point cloud. 
 
 ## Known Issues
--Not tested on MRI, SPECT, PET or other imaging modalities.
--CT, Dose and Structure locations are not co-registered yet (user needs to manually align them at the moment).
+- Not tested on MRI, SPECT, PET or other imaging modalities.
+- CT, Dose and Structure locations are not co-registered yet (user needs to manually align them at the moment).
 
 Please report any bugs as an issue on this repository
 
