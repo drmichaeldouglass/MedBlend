@@ -83,7 +83,9 @@ MedBlend: A Medical Visualisation Add-On for Blender, M.Douglass
 https://github.com/drmichaeldouglass/MedBlend
 
 
-## Support the development of MedBlend:
+## Support the development of MedBlend via PayPal
+![download](https://user-images.githubusercontent.com/52724915/220474865-3edb00ea-9582-450d-9fb1-e6414b4e8db3.png)
+
 
 
 ## References
