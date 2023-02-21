@@ -4,7 +4,7 @@ A Medical Visualisation Add-On for Blender
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
 
-![blue](https://user-images.githubusercontent.com/52724915/220471974-3b90347b-3dce-4c2f-8b75-a105b6c5c470.svg)([link to your URL](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD))
+![blue](https://user-images.githubusercontent.com/52724915/220471974-3b90347b-3dce-4c2f-8b75-a105b6c5c470.svg)([[link to your URL](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD)])
 
 
 
