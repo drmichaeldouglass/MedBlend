@@ -1,6 +1,6 @@
 # MedBlend
 A Medical Visualisation Add-On for Blender
-### (This project is still in development. The code provided here is still being developed and has not been optimised yet)
+(This project is still in development. The code provided here is still being developed and has not been optimised yet)
 
 ## Introduction
 
