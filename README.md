@@ -1,7 +1,11 @@
+
 # MedBlend
 A Medical Visualisation Add-On for Blender
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
+
+
+https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD
 
 ## Introduction
 
