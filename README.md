@@ -4,7 +4,11 @@ A Medical Visualisation Add-On for Blender
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
 
-[url=[DONATIONURLHERE](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD)][img]https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif[/img][/url]
+<p>
+  <a href="[https://www.paypal.me/AbdennourT/10](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD)">
+      <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="paypal">
+  </a>
+</p>
 
 ## Introduction
 
