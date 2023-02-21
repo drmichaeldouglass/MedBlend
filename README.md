@@ -60,14 +60,14 @@ Please report any bugs as an issue on this repository
 
 ### Import Radaition Therapy Plan Files
 
-Linac or Proton Spot DICOM plan files
-(In Progress)
+Import radaition therapy DICOM plan files to visulise MLC or proton spot positions in the patient CT
 
 ### Import Brachytherapy Dwell Points
 
+Visulise brachytherapy dwell point positions and dwell times
+
 ### Treatment simulation with Linac model.
 
-(In Progress)
 
 ## How to Cite
 
