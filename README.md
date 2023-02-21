@@ -84,11 +84,7 @@ https://github.com/drmichaeldouglass/MedBlend
 
 
 ## Support the development of MedBlend:
-[
-  ![Donate with PayPal]
-  (https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png)
-]
-([https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=QT54MSJR6QU7Y](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD))
+
 
 ## References
 
