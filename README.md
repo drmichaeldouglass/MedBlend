@@ -18,6 +18,21 @@ Blender RT utilises the pydicom module and is installed as a dependancy when you
 
 ## Installation
 
+### Download MedBlend
+
+To download MedBlend, click the following link and select the latest release.
+https://github.com/drmichaeldouglass/MedBlend/tags
+
+Download the add-on installation file which will be of the form: "medblend_0.0.1.zip", for MedBlend version 0.0.1 for example. 
+
+### Install MedBlend
+
+Open Blender 3.5 and from the Edit-->Preferences menu. Select "Add-ons". Then press install and find the medblend_0.0.1.zip file in the file explorer.
+
+![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
+
+Once installed, under the preferences for this add-on, select "Install Python Modules". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
+
 
 
 ## How to use BlenderRT
