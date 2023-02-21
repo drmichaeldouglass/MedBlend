@@ -4,12 +4,6 @@ A Medical Visualisation Add-On for Blender
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
 
-<p>
-  <a href="[https://www.paypal.me/AbdennourT/10](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD)">
-      <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="paypal">
-  </a>
-</p>
-
 ## Introduction
 
 ## Intended Use
@@ -87,6 +81,14 @@ Visulise brachytherapy dwell point positions and dwell times
 
 MedBlend: A Medical Visualisation Add-On for Blender, M.Douglass
 https://github.com/drmichaeldouglass/MedBlend
+
+
+## Support the development of MedBlend:
+[
+  ![Donate with PayPal]
+  (https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png)
+]
+([https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=QT54MSJR6QU7Y](https://www.paypal.com/donate/?business=BBZ8K79E64Z5G&no_recurring=0&item_name=Help+support+the+development+of+MedBlend%2C+an+open-source+medical+visualisation+tool+for+Blender.&currency_code=AUD))
 
 ## References
 
