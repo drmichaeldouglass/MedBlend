@@ -3,6 +3,7 @@ import pydicom
 import os
 import numpy as np
 from pathlib import Path
+import easybpy
 
 
 #Directory containing DICOM images
@@ -13,6 +14,12 @@ root_dir = file_path.parents[0]
 
 # Load the DICOM dataset
 ds = pydicom.read_file(DICOM_dir) 
+
+#Need to Check if DICOM is Dose
+#if ds.Modality != 'RTDose':
+#    print('Not a Dose DICOM')
+#    exit() 
+
 
 referenced_plan_file_UID = ds.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID
 
@@ -58,6 +65,6 @@ openvdb.write(str(dose_dir),grid)
 
 # Add the volume to the scene
 bpy.ops.object.volume_import(filepath=str(dose_dir), files=[])
-
+DICOM_object = easybpy.get_selected_object()
 # Set the volume's origin to match the DICOM image position
 #bpy.context.object.location = origin/1000

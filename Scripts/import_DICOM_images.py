@@ -3,6 +3,7 @@ import pydicom
 import os
 import numpy as np
 from pathlib import Path
+import easybpy
 
 dicom_series_id = []
 dicom_set = []
@@ -66,7 +67,7 @@ openvdb.write(str(dir_path.joinpath("CT.vdb")),grid)
 
 # Add the volume to the scene
 bpy.ops.object.volume_import(filepath=str(dir_path.joinpath("CT.vdb")), files=[])
-
+DICOM_object = easybpy.get_selected_object()
 # Set the volume's origin to match the DICOM image position
-print(origin)
+#print(origin)
 #py.context.object.location = origin/1000
