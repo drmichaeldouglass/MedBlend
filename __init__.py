@@ -16,7 +16,7 @@ bl_info = {
     "author" : "Michael Douglass", 
     "description" : "A Medical Visualisation Add-On for Blender",
     "blender" : (3, 5, 0),
-    "version" : (0, 0, 2),
+    "version" : (0, 0, 3),
     "location" : "",
     "warning" : "",
     "doc_url": "https://github.com/drmichaeldouglass/MedBlend", 
@@ -31,7 +31,7 @@ import os
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from pathlib import Path
 import pyopenvdb as openvdb
-import pydicom 
+import subprocess
 import numpy as np
 
 
@@ -132,35 +132,6 @@ class SNA_OT_Load_Dicom_Dose_87594(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 
-class SNA_PT_MEDBLEND_F92BE(bpy.types.Panel):
-    bl_label = 'MedBlend'
-    bl_idname = 'SNA_PT_MEDBLEND_F92BE'
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_context = ''
-    bl_category = 'MedBlend'
-    bl_order = 0
-    bl_ui_units_x=0
-
-    @classmethod
-    def poll(cls, context):
-        return not (False)
-
-    def draw_header(self, context):
-        layout = self.layout
-
-    def draw(self, context):
-        layout = self.layout
-        layout.label(text='DICOM Images', icon_value=200)
-        op = layout.operator('sna.load_dicom_images_58ed9', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
-        layout.label(text='Dose', icon_value=851)
-        op = layout.operator('sna.load_dicom_dose_87594', text='Load DICOM Dose', icon_value=0, emboss=True, depress=False)
-        layout.label(text='Structures', icon_value=387)
-        op = layout.operator('sna.load_dicom_structures_ac122', text='Load DICOM Structures', icon_value=0, emboss=True, depress=False)
-        layout.label(text='Proton Spots', icon_value=655)
-        op = layout.operator('sna.load_proton_spots_0d63c', text='Load Proton Spots and Weights', icon_value=0, emboss=True, depress=False)
-
-
 class SNA_OT_Load_Dicom_Structures_Ac122(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_dicom_structures_ac122"
     bl_label = "Load DICOM Structures"
@@ -219,6 +190,41 @@ class SNA_OT_Load_Dicom_Structures_Ac122(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 
+class SNA_OT_Install_Dependancies_7C0E6(bpy.types.Operator):
+    bl_idname = "sna.install_dependancies_7c0e6"
+    bl_label = "Install Dependancies"
+    bl_description = "Install Python Modules"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        if bpy.app.version >= (3, 0, 0) and True:
+            cls.poll_message_set('')
+        return not False
+
+    def execute(self, context):
+        import sys
+        import site
+        # path to python.exe
+        python_exe = os.path.realpath(sys.executable)
+        # upgrade pip
+        subprocess.call([python_exe, "-m", "ensurepip"])
+        subprocess.call([python_exe, "-m", "pip", "install",
+                        "--upgrade", "pip"], timeout=600)
+        # install required packages
+        subprocess.call([python_exe, "-m", "pip", "install", "pydicom"], timeout=600)
+
+        def verify_user_sitepackages(package_location):
+            if os.path.exists(package_location) and package_location not in sys.path:
+                sys.path.append(package_location)
+        verify_user_sitepackages(site.getusersitepackages())
+        print("success!")
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+
 class SNA_OT_Load_Proton_Spots_0D63C(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_proton_spots_0d63c"
     bl_label = "Load Proton Spots"
@@ -235,6 +241,37 @@ class SNA_OT_Load_Proton_Spots_0D63C(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         proton_plan = self.filepath
         return {"FINISHED"}
+
+
+class SNA_PT_MEDBLEND_FA2DF(bpy.types.Panel):
+    bl_label = 'MedBlend'
+    bl_idname = 'SNA_PT_MEDBLEND_FA2DF'
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_context = ''
+    bl_category = 'MedBlend'
+    bl_order = 0
+    bl_ui_units_x=0
+
+    @classmethod
+    def poll(cls, context):
+        return not (False)
+
+    def draw_header(self, context):
+        layout = self.layout
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text='DICOM Images', icon_value=200)
+        op = layout.operator('sna.load_dicom_images_58ed9', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Dose', icon_value=851)
+        op = layout.operator('sna.load_dicom_dose_87594', text='Load DICOM Dose', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Structures', icon_value=387)
+        op = layout.operator('sna.load_dicom_structures_ac122', text='Load DICOM Structures', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Proton Spots', icon_value=655)
+        op = layout.operator('sna.load_proton_spots_0d63c', text='Load Proton Spots and Weights', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Install Dependancies', icon_value=164)
+        op = layout.operator('sna.install_dependancies_7c0e6', text='Install Python Modules', icon_value=0, emboss=True, depress=False)
 
 
 class SNA_OT_Load_Dicom_Images_58Ed9(bpy.types.Operator, ImportHelper):
@@ -390,45 +427,15 @@ class SNA_OT_Load_Dicom_Images_58Ed9(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 
-class SNA_AddonPreferences_EEDE7(bpy.types.AddonPreferences):
-    bl_idname = 'medblend'
-
-    def draw(self, context):
-        if not (False):
-            layout = self.layout 
-            layout.label(text='Install Dependancies', icon_value=164)
-            op = layout.operator('sna.install_dependancies_7c0e6', text='Install Python Modules', icon_value=0, emboss=True, depress=False)
-
-
-class SNA_OT_Install_Dependancies_7C0E6(bpy.types.Operator):
-    bl_idname = "sna.install_dependancies_7c0e6"
-    bl_label = "Install Dependancies"
-    bl_description = "Install Python Modules"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
-    def execute(self, context):
-        return {"FINISHED"}
-
-    def invoke(self, context, event):
-        return self.execute(context)
-
-
 def register():
     global _icons
     _icons = bpy.utils.previews.new()
     bpy.utils.register_class(SNA_OT_Load_Dicom_Dose_87594)
-    bpy.utils.register_class(SNA_PT_MEDBLEND_F92BE)
     bpy.utils.register_class(SNA_OT_Load_Dicom_Structures_Ac122)
-    bpy.utils.register_class(SNA_OT_Load_Proton_Spots_0D63C)
-    bpy.utils.register_class(SNA_OT_Load_Dicom_Images_58Ed9)
-    bpy.utils.register_class(SNA_AddonPreferences_EEDE7)
     bpy.utils.register_class(SNA_OT_Install_Dependancies_7C0E6)
+    bpy.utils.register_class(SNA_OT_Load_Proton_Spots_0D63C)
+    bpy.utils.register_class(SNA_PT_MEDBLEND_FA2DF)
+    bpy.utils.register_class(SNA_OT_Load_Dicom_Images_58Ed9)
 
 
 def unregister():
@@ -440,9 +447,8 @@ def unregister():
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
     bpy.utils.unregister_class(SNA_OT_Load_Dicom_Dose_87594)
-    bpy.utils.unregister_class(SNA_PT_MEDBLEND_F92BE)
     bpy.utils.unregister_class(SNA_OT_Load_Dicom_Structures_Ac122)
-    bpy.utils.unregister_class(SNA_OT_Load_Proton_Spots_0D63C)
-    bpy.utils.unregister_class(SNA_OT_Load_Dicom_Images_58Ed9)
-    bpy.utils.unregister_class(SNA_AddonPreferences_EEDE7)
     bpy.utils.unregister_class(SNA_OT_Install_Dependancies_7C0E6)
+    bpy.utils.unregister_class(SNA_OT_Load_Proton_Spots_0D63C)
+    bpy.utils.unregister_class(SNA_PT_MEDBLEND_FA2DF)
+    bpy.utils.unregister_class(SNA_OT_Load_Dicom_Images_58Ed9)
