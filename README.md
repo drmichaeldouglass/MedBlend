@@ -32,7 +32,7 @@ Open Blender 3.5 and from the Edit-->Preferences menu. Select "Add-ons". Then pr
 
 ![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
 
-Once installed, under the preferences for this add-on, select "Install Python Modules". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
+Once installed, under the Medical category in the 3D viewport, select MedBlend and then select "Install Python Modules". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
 
 
 ![Install_2](https://user-images.githubusercontent.com/52724915/220255502-0530ca5d-0d55-4f21-8b74-050b8879abd0.PNG)
