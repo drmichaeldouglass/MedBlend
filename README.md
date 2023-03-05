@@ -1,6 +1,9 @@
 
-# MedBlend
+
+# MedBlend 
 A Medical Visualisation Add-On for Blender
+![ADC6C67E2-F8F9-48CD-AE18-8AAD63B438D5](https://user-images.githubusercontent.com/52724915/222957178-4d39777b-2366-4918-83f7-b82f3fc717f6.png)
+
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
 
