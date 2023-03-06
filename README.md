@@ -47,7 +47,7 @@ Once installed, open the 3D viewport and select the MedBlend category from the s
 
 MedBlend currently has 3 Load functions: Load DICOM images, Load DICOM Dose and Load DICOM structures. Each of these functions imports a specific DICOM medical file. 
 
-Load DICOM Images, will allow you to select multiple DICOM image slices from a specified folder. These image slices will be imported and converted to a volume object which can be rendered in Blender. Upon sucessfully importing the images, Blender will automatically add a material to this object. This material can be made brighter by increasing the value on the math node in the shader editor window.
+Load DICOM Images, will allow you to load a DICOM image sequence from a specified folder. When you press the load images button from the menu, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images with the same study ID into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. Upon sucessfully importing the images, Blender will automatically add a material to this object (in development). This material can be made brighter by increasing the value on the math node in the shader editor window.
 
 
 Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. This add-on will automatically create a material for the volume once imported. This material can be made brighter by increasing the value on the math node in the shader editor window.
