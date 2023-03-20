@@ -93,8 +93,6 @@ def is_structure_file(ds):
 
 def install_python_modules():
 
-
-    
     import subprocess
     import platform
 
@@ -137,7 +135,8 @@ def install_python_modules():
             subprocess.call([python_exe, "-m", "pip", "install", packageName])
     installModule('pydicom')
     #credit to luckychris https://github.com/luckychris
-    return 1    
+    return 1  
+    
 
 def check_dicom_image_type(ds):
     """
@@ -440,17 +439,26 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
         
             #Get the Dose Grid
             pixel_data = ds.pixel_array 
+            
+            #If the resolution of the dose grid cannot be found, set the resolution to 1 mm
+            try:
+                dose_resolution = [ds.PixelSpacing[0]/1000, ds.PixelSpacing[1]/1000, ds.SliceThickness/1000] 
+            except:
+                dose_resolution = [1/1000, 1/1000, 1/1000]   
+
+            #CT origin coordinates (use DICOM coordinates by default, set to zero otherwise)
+            try:
+                origin = np.asarray(ds.ImagePositionPatient)
+            except:
+                origin = (0,0,0)
         
-            dose_resolution = [ds.PixelSpacing[0]/1000, ds.PixelSpacing[1]/1000, ds.SliceThickness/1000] 
-        
-            #CT origin coordinates
-            origin = np.asarray(ds.ImagePositionPatient)
-        
+
             #Converts list to numpy array
             dose_matrix = np.asarray(pixel_data)
+            
             #Normalises the image volume in range 0,1
-            dose_matrix = dose_matrix/np.max(dose_matrix)
-        
+            #dose_matrix = dose_matrix/np.max(dose_matrix)
+            dose_matrix = rescale_DICOM_image(dose_matrix)
             # Create an OpenVDB volume from the pixel data
             
             #Creates a grid of Double precision
