@@ -18,7 +18,7 @@ This Blender add-on is intended to be used to create visulisations of radiation 
 This package is intended for research or educational purposes only and should not be used for clinical applications. By using this add-on you accept that this software is provided without warranty and the author will not be held liable for any damages caused by the use of this software. 
 
 ## Requirements
-Blender RT utilises the pydicom module and is installed as a dependancy when you enable the add-on in Blender. The add-on also uses the pyopenvdb module which has recently been added to Blender version 3.5. 
+MedBlend utilises the pydicom module and is installed as a dependancy when you enable the add-on in Blender. The add-on also uses the pyopenvdb module which has recently been added to Blender version 3.5. 
 
 ## Installation
 
@@ -36,32 +36,72 @@ If you have local administrator rights to run Blender then use these instruction
 Open Blender 3.5, ensuring to run Blender using administrator privalidges. From the Edit-->Preferences menu. Select "Add-ons". Then press install and find the medblend_0.0.1.zip file in the file explorer.
 
 ![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
+![add_on_install](https://user-images.githubusercontent.com/52724915/226311722-c2d06900-b1db-4056-a5ce-64bf2ca490ba.png)
 
 Once installed, under the Medical category in the 3D viewport, select MedBlend and then select "Install Python Modules". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
 
 
-![Install_2](https://user-images.githubusercontent.com/52724915/220255502-0530ca5d-0d55-4f21-8b74-050b8879abd0.PNG)
+
+![install_python](https://user-images.githubusercontent.com/52724915/226311500-9c8de27c-7180-4ca8-acc9-c29478600b96.png)
+
 
 ### Install MedBlend (If you don't have administrator rights to your PC)
 
-## How to use BlenderRT
+If you don't have administrator rights to your PC, you can use MedBlend by installing the add-on to a portable version of Blender. The portable versions of Blender can be identified by the ".zip" type Blender downloads (shown in the figure below).
 
-Once installed, open the 3D viewport and select the MedBlend category from the sidebar. Press N on the keyboard if it is not visible. 
-![Install_3](https://user-images.githubusercontent.com/52724915/220255514-08a69a10-a520-4d10-a956-4c79fdacdc95.PNG)
+Releases of Blender can be downloaded from here: https://www.blender.org/download/
 
-MedBlend currently has 3 Load functions: Load DICOM images, Load DICOM Dose and Load DICOM structures. Each of these functions imports a specific DICOM medical file. 
+Experimental builds can be downloaded here: https://builder.blender.org/download/daily/
 
-Load DICOM Images, will allow you to load a DICOM image sequence from a specified folder. When you press the load images button from the menu, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images with the same study ID into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. Upon sucessfully importing the images, Blender will automatically add a material to this object (in development). This material can be made brighter by increasing the value on the math node in the shader editor window.
+![blender_portable](https://user-images.githubusercontent.com/52724915/226309978-c3b34cac-d97f-49c6-9ea9-76a086e76fb7.png)
 
 
-Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. This add-on will automatically create a material for the volume once imported. This material can be made brighter by increasing the value on the math node in the shader editor window.
+Ensure that the version of Blender that you download is 3.5 or later. Once downloaded, unzip the file and look for the file called Blender.exe. This version of Blender can be run locally without installation or saved to a USB drive. 
 
-Finally, Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system and import each structure as a separate point cloud. 
+Blender, by default will try and install add-ons to the directory: C:\Users\(username)\AppData\Roaming\Blender Foundation\Blender\3.5\scripts\addons. If you do not have administrator rights to your PC, you will not be able to install add-ons to this directory. Instead, you will need to manually install the add-on to the portable version of Blender you have just downloaded.
 
-Here are some examples showing a CT, structures and dose volumes imported and overlayed. 
+Start by un-zipping the MedBlend add-on (medblend_0.0.1.zip) for example. Once un-zipped, you should have a folder called "medblend" which contains a file called init.py. Copy the folder "medblend" to the directory "D:\Blender3.5\3.5\scripts\addons" so that the directory structure now looks like "D:\Blender3.5\3.5\scripts\addons\medblend\init.py". Your path to Blender 3.5 might look different, so change accordingly. 
+
+Load up Blender 3.5 portable by running blender.exe. When you select Edit-->Preferences and Add-Ons, you should find that MedBlend is already installed. 
+
+![add_on_install](https://user-images.githubusercontent.com/52724915/226311899-a479f86d-c611-4940-a706-d8814def3533.png)
+
+Once installed, under the Medical category in the 3D viewport, select MedBlend and then select "Install Dependancies". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
+
+![install_python](https://user-images.githubusercontent.com/52724915/226311909-2a25058e-d473-4225-917f-693ff46e39d7.png)
+
+Installing the python modules should download a module named "pydicom" to the following location "D:\Blender3.5\3.5\python\lib\site-packages". If pydicom is not in this location, MedBlend will not function correctly.
+
+## How to use MedBlend
+
+Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. 
+
+![medBlendFunctions](https://user-images.githubusercontent.com/52724915/226313830-c5dbd57b-5199-40f0-befd-4f3da1883e45.png)
+
+
+MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
+
+-Load DICOM Images, will allow you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images with the same study ID into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. 
+
+-Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. 
+
+-Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system and import each structure as a separate point cloud. 
+
+-Load Proton Plan will import a DICOM RT Ion proton therapy plan file and extract the proton spot positions and weights and display them as spheres with a radius proportional to the relative spot weight. 
+
+Here are some examples:
+
+A CT scan, structures and dose volumes imported and overlayed. 
+
 ![Dose](https://user-images.githubusercontent.com/52724915/220470967-dd2b78f5-c34b-4c70-a5a5-fcea588e37a8.GIF)
+
+DICOM structures for a test prostate radiotherapy plan showing organs at risk such as prostate, urethra, bladder, rectum and the external structure.
+
 ![Structure](https://user-images.githubusercontent.com/52724915/220471006-f343c851-915e-4b51-ada2-8164aebb3ae5.GIF)
 
+A test proton therapy plan on a phantom. The CT images, dose distribution and proton spots are shown.
+
+![Proton](https://user-images.githubusercontent.com/52724915/226314672-d9df0645-27b0-4a92-a315-d1a19d69b526.GIF)
 
 
 ## Known Issues
