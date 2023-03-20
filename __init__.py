@@ -93,29 +93,51 @@ def is_structure_file(ds):
 
 def install_python_modules():
 
-    # path to python.exe
-    python_exe = os.path.realpath(sys.executable)
-    
-    # upgrade pip
-    subprocess.call([python_exe, "-m", "ensurepip"])
-    subprocess.call([python_exe, "-m", "pip", "install",
-                    "--upgrade", "pip"], timeout=600)
-    
-    # install required packages
-    subprocess.call([python_exe, "-m", "pip", "install", "pydicom"], timeout=600)
-    
-    
-    verify_user_sitepackages(site.getusersitepackages())
-    
-    try:
-        import pydicom
-        pydicom_install_successful = True
-    except:
-        pydicom_install_successful = False
 
-    return pydicom_install_successful
     
-    
+    import subprocess
+    import platform
+
+    def isWindows():
+        return os.name == 'nt'
+
+    def isMacOS():
+        return os.name == 'posix' and platform.system() == "Darwin"
+
+    def isLinux():
+        return os.name == 'posix' and platform.system() == "Linux"
+
+    def python_exec():
+        import sys
+        if isWindows():
+            return os.path.join(sys.prefix, 'bin', 'python.exe')
+        elif isMacOS():
+            try:
+                # 2.92 and older
+                path = bpy.app.binary_path_python
+            except AttributeError:
+                # 2.93 and later
+                import sys
+                path = sys.executable
+            return os.path.abspath(path)
+        elif isLinux():
+            return os.path.join(sys.prefix, 'sys.prefix/bin', 'python')
+        else:
+            print("sorry, still not implemented for ", os.name, " - ", platform.system)
+
+    def installModule(packageName):
+        try:
+            subprocess.call([python_exe, "import ", packageName])
+        except:
+            python_exe = python_exec()
+           # upgrade pip
+            subprocess.call([python_exe, "-m", "ensurepip"])
+            subprocess.call([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
+           # install required packages
+            subprocess.call([python_exe, "-m", "pip", "install", packageName])
+    installModule('pydicom')
+    #credit to luckychris https://github.com/luckychris
+    return 1    
 
 def check_dicom_image_type(ds):
     """
@@ -418,26 +440,17 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
         
             #Get the Dose Grid
             pixel_data = ds.pixel_array 
-            
-            #If the resolution of the dose grid cannot be found, set the resolution to 1 mm
-            try:
-                dose_resolution = [ds.PixelSpacing[0]/1000, ds.PixelSpacing[1]/1000, ds.SliceThickness/1000] 
-            except:
-                dose_resolution = [1/1000, 1/1000, 1/1000]   
-
-            #CT origin coordinates (use DICOM coordinates by default, set to zero otherwise)
-            try:
-                origin = np.asarray(ds.ImagePositionPatient)
-            except:
-                origin = (0,0,0)
         
-
+            dose_resolution = [ds.PixelSpacing[0]/1000, ds.PixelSpacing[1]/1000, ds.SliceThickness/1000] 
+        
+            #CT origin coordinates
+            origin = np.asarray(ds.ImagePositionPatient)
+        
             #Converts list to numpy array
             dose_matrix = np.asarray(pixel_data)
-            
             #Normalises the image volume in range 0,1
-            #dose_matrix = dose_matrix/np.max(dose_matrix)
-            dose_matrix = rescale_DICOM_image(dose_matrix)
+            dose_matrix = dose_matrix/np.max(dose_matrix)
+        
             # Create an OpenVDB volume from the pixel data
             
             #Creates a grid of Double precision
