@@ -16,7 +16,7 @@ bl_info = {
     "author" : "Michael Douglass", 
     "description" : "A Medical image visulisation tool for Blender",
     "blender" : (3, 5, 0),
-    "version" : (0, 0, 1),
+    "version" : (0, 0, 2),
     "location" : "Australia",
     "warning" : "",
     "doc_url": "https://github.com/drmichaeldouglass/MedBlend", 
