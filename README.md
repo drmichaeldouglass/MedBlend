@@ -1,9 +1,9 @@
 
 
+![Colorful People Humanity Company Logo](https://user-images.githubusercontent.com/52724915/226303048-6ed4e906-02cc-4d68-aa9e-d22bdbb490e4.png)
+
 # MedBlend 
 A Medical Visualisation Add-On for Blender
-![ADC6C67E2-F8F9-48CD-AE18-8AAD63B438D5](https://user-images.githubusercontent.com/52724915/222957178-4d39777b-2366-4918-83f7-b82f3fc717f6.png)
-
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
 
@@ -29,9 +29,11 @@ https://github.com/drmichaeldouglass/MedBlend/tags
 
 Download the add-on installation file which will be of the form: "medblend_0.0.1.zip", for MedBlend version 0.0.1 for example. 
 
-### Install MedBlend
+### Install MedBlend (If you have administrator rights to your PC)
 
-Open Blender 3.5 and from the Edit-->Preferences menu. Select "Add-ons". Then press install and find the medblend_0.0.1.zip file in the file explorer.
+If you have local administrator rights to run Blender then use these instructions otherwise, use the instructions in the next section.
+
+Open Blender 3.5, ensuring to run Blender using administrator privalidges. From the Edit-->Preferences menu. Select "Add-ons". Then press install and find the medblend_0.0.1.zip file in the file explorer.
 
 ![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
 
@@ -39,6 +41,8 @@ Once installed, under the Medical category in the 3D viewport, select MedBlend a
 
 
 ![Install_2](https://user-images.githubusercontent.com/52724915/220255502-0530ca5d-0d55-4f21-8b74-050b8879abd0.PNG)
+
+### Install MedBlend (If you don't have administrator rights to your PC)
 
 ## How to use BlenderRT
 
