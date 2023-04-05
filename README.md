@@ -121,6 +121,7 @@ A test proton therapy plan on a phantom. The CT images, dose distribution and pr
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
 - CT, Dose and Structure locations are not co-registered yet (user needs to manually align them at the moment).
+- After installing the python modules, the DICOM functions sometimes do not appear. This can be fixed by restarting Blender.
 
 Please report any bugs as an issue on this repository
 
