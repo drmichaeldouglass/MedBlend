@@ -8,7 +8,7 @@ import numpy as np
 def make_mlc_leaf(MLC_index = 1):
     # Set the dimensions of the cube
     x_dim = 1
-    y_dim = 20
+    y_dim = 40
     z_dim = 1
     
     # Create a cube and set its dimensions
@@ -37,7 +37,7 @@ def make_mlc_leaf(MLC_index = 1):
     #bpy.context.object.location[1] = MLC_index//60
 
 
-ds = pydicom.dcmread("C:\MedBlend\Rando Test Files\DICOM_Calibration\RP.2.16.840.1.113669.2.931128.218371667.20230414102711.431820.dcm")
+ds = pydicom.dcmread("C:\MedBlend\Rando Test Files\Xray\CT\RP1.2.752.243.1.1.20230109113526003.1830.31818.dcm")
 beam_num = 0
 #MLC_positions_all = []
 for beam in ds.BeamSequence:
@@ -63,9 +63,9 @@ for MLC_Number in range(0,mlc_positions.shape[1]):
         
         if MLC_Number <= 59:
         
-            bpy.context.object.location.y = mlc_positions[frame,MLC_Number]
+            bpy.context.object.location.y = -mlc_positions[frame,MLC_Number]
         else:
-            bpy.context.object.location.y = mlc_positions[frame,MLC_Number]
+            bpy.context.object.location.y = -mlc_positions[frame,MLC_Number]
        
         
         bpy.context.object.keyframe_insert(data_path="location", frame=frame)
