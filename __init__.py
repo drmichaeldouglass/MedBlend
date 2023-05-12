@@ -300,7 +300,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             # Sort those filtered DICOM CT slices by their instance number using sort_by_instance_number function
             sorted_images = sort_by_instance_number(filtered_images)
             CT_volume, spacing, slice_position, slice_spacing = extract_dicom_data(sorted_images)
-            CT_volume = rescale_DICOM_image(CT_volume)
+            #CT_volume = rescale_DICOM_image(CT_volume)
             origin = slice_position[int(len(sorted_images)/2)]
             origin = np.asarray(origin)
             volume_dim = np.shape(CT_volume)
@@ -374,7 +374,9 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
         
         control_points = dataset.IonBeamSequence[0].IonControlPointSequence
         num_control_points = len(control_points)
-        
+        frame_index = 1
+        bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+        empty = bpy.data.objects['Empty']
         spots = []
         for i in range(0, num_control_points, 2): 
             spots_in_energy_layer = len(dataset.IonBeamSequence[0].IonControlPointSequence[i].ScanSpotPositionMap)
@@ -389,7 +391,9 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
                     
                     print(x,y,E)
                     if weights[int(j/2)]>0:
-                        
+                        empty.location = (x,y,E)
+                        empty.keyframe_insert(data_path="location", frame=frame_index)
+                        frame_index=frame_index + 1
                         bpy.ops.mesh.primitive_uv_sphere_add(location=(x,y,E), radius=weights[int(j/2)]/10)
     
         return {"FINISHED"}
@@ -610,3 +614,6 @@ def unregister():
     bpy.utils.unregister_class(SNA_OT_Load_Dose_7629F)
     bpy.utils.unregister_class(SNA_OT_Load_Structures_5Ebc9)
     bpy.utils.unregister_class(install_python_dependancies)
+    
+    
+register()

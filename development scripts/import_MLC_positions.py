@@ -7,7 +7,7 @@ import numpy as np
 
 def make_mlc_leaf(MLC_index = 1):
     # Set the dimensions of the cube
-    x_dim = 1
+    x_dim = 2
     y_dim = 40
     z_dim = 1
     
@@ -33,7 +33,7 @@ def make_mlc_leaf(MLC_index = 1):
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
-    bpy.context.object.location[0] = np.mod(MLC_index,60)
+    bpy.context.object.location[0] = np.mod(MLC_index,60)*x_dim
     #bpy.context.object.location[1] = MLC_index//60
 
 
