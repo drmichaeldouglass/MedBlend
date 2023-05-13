@@ -305,6 +305,11 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             origin = np.asarray(origin)
             volume_dim = np.shape(CT_volume)
             
+            # Calculate the center of the CT volume in pixels
+            center_pixel = np.array(CT_volume.shape) // 2
+
+            # Convert the center pixel location to centimeters
+            CT_volume_center = center_pixel * np.array([spacing[1], spacing[0], slice_spacing])
             
             # Print out some information about your sorted slices
             print(f"Number of slices: {len(sorted_images)}")
@@ -320,7 +325,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
             grid.transform = openvdb.createLinearTransform([[slice_spacing/1000, 0, 0, 0], [0, spacing[0]/1000, 0, 0], [0,0,spacing[1]/1000,0], [0,0,0,1]])
-            grid.transform.translate = ((origin[0],origin[1],origin[2]))
+            #grid.transform.translate = ((origin[0],origin[1],origin[2]))
             
             #Sets the grid class to FOG_VOLUME
             grid.gridClass = openvdb.GridClass.FOG_VOLUME
@@ -333,6 +338,9 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             # Add the volume to the scene
             bpy.ops.object.volume_import(filepath=str(dir_path.joinpath("CT.vdb")), files=[])
+            bpy.context.active_object.location = CT_volume_center/100
+            
+
             #DICOM_object = easybpy.get_selected_object()
             #images_loaded = True
         else:
