@@ -201,13 +201,14 @@ def extract_dicom_data(images):
   slice_position = []
   slice_spacing = []
   for i in range(0,len(images)):
-      dicom_3d_array.append(images[i].pixel_array)
+      dicom_3d_array.append(np.transpose(np.flipud(images[i].pixel_array)))
       spacing = images[i].PixelSpacing
       slice_position.append(images[i].ImagePositionPatient)
       slice_spacing = images[i].SliceThickness
-
+      image_origin = images[i].ImagePositionPatient
+      print(slice_spacing)
   dicom_3d_array = np.asarray(dicom_3d_array)    
-  return dicom_3d_array, spacing, slice_position, slice_spacing
+  return dicom_3d_array, spacing, slice_position, slice_spacing, image_origin
 
 def rescale_DICOM_image(array):
     # Get the minimum and maximum values of the array
@@ -299,17 +300,14 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             # Sort those filtered DICOM CT slices by their instance number using sort_by_instance_number function
             sorted_images = sort_by_instance_number(filtered_images)
-            CT_volume, spacing, slice_position, slice_spacing = extract_dicom_data(sorted_images)
+            CT_volume, spacing, slice_position, slice_spacing, image_origin = extract_dicom_data(sorted_images)
+    
+
+            #CT_volume= np.transpose(CT_volume, axes=(2,1,0))
             #CT_volume = rescale_DICOM_image(CT_volume)
-            origin = slice_position[int(len(sorted_images)/2)]
+            origin = [image_origin[2], image_origin[1], image_origin[0]]#[int(len(sorted_images)/2)]
             origin = np.asarray(origin)
             volume_dim = np.shape(CT_volume)
-            
-            # Calculate the center of the CT volume in pixels
-            center_pixel = np.array(CT_volume.shape) // 2
-
-            # Convert the center pixel location to centimeters
-            CT_volume_center = center_pixel * np.array([spacing[1], spacing[0], slice_spacing])
             
             # Print out some information about your sorted slices
             print(f"Number of slices: {len(sorted_images)}")
@@ -322,7 +320,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             #Copies image volume from numpy to VDB grid
             grid.copyFromArray(CT_volume.astype(float))
-            
+            #print(slice_spacing)
             #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
             grid.transform = openvdb.createLinearTransform([[slice_spacing/1000, 0, 0, 0], [0, spacing[0]/1000, 0, 0], [0,0,spacing[1]/1000,0], [0,0,0,1]])
             #grid.transform.translate = ((origin[0],origin[1],origin[2]))
@@ -338,7 +336,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             # Add the volume to the scene
             bpy.ops.object.volume_import(filepath=str(dir_path.joinpath("CT.vdb")), files=[])
-            bpy.context.active_object.location = CT_volume_center/100
+            bpy.context.active_object.location = origin/1000
             
 
             #DICOM_object = easybpy.get_selected_object()
@@ -460,7 +458,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
 
             #CT origin coordinates (use DICOM coordinates by default, set to zero otherwise)
             try:
-                origin = np.asarray(ds.ImagePositionPatient)
+                origin = np.asarray(ds.ImagePositionPatient) 
             except:
                 origin = (0,0,0)
         
@@ -495,7 +493,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
             bpy.ops.object.volume_import(filepath=str(dose_dir), files=[])
             #DICOM_object = easybpy.get_selected_object()
             # Set the volume's origin to match the DICOM image position
-            #bpy.context.object.location = origin/1000
+            bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
             dose_loaded = True
         else:
             print('No Dose File Loaded')
