@@ -201,7 +201,8 @@ def extract_dicom_data(images):
   slice_position = []
   slice_spacing = []
   for i in range(0,len(images)):
-      dicom_3d_array.append(np.transpose(np.flipud(images[i].pixel_array)))
+      #dicom_3d_array.append(np.transpose(np.flipud(images[i].pixel_array)))
+      dicom_3d_array.append(images[i].pixel_array)
       spacing = images[i].PixelSpacing
       slice_position.append(images[i].ImagePositionPatient)
       slice_spacing = images[i].SliceThickness
@@ -469,6 +470,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
             #Normalises the image volume in range 0,1
             #dose_matrix = dose_matrix/np.max(dose_matrix)
             dose_matrix = rescale_DICOM_image(dose_matrix)
+            #dose_matrix = dose_matrix.transpose(0, 2, 1)
             # Create an OpenVDB volume from the pixel data
             
             #Creates a grid of Double precision
