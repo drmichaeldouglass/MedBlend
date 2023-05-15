@@ -208,7 +208,8 @@ def extract_dicom_data(images):
       slice_spacing = images[i].SliceThickness
       image_origin = images[i].ImagePositionPatient
       print(slice_spacing)
-  dicom_3d_array = np.asarray(dicom_3d_array)    
+  dicom_3d_array = np.asarray(dicom_3d_array)   
+  dicom_3d_array = np.flipud(dicom_3d_array)
   return dicom_3d_array, spacing, slice_position, slice_spacing, image_origin
 
 def rescale_DICOM_image(array):
