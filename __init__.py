@@ -372,38 +372,43 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
 
         # Read the DICOM file and get the spot positions and weights 
 
-        dataset = pydicom.dcmread(file_name_proton) 
+        ds = pydicom.dcmread(file_name_proton) 
         
-        if is_proton_plan(dataset):
+        if is_proton_plan(ds):
              print('File is proton plan')
         else:
              print('File is not proton plan')
+
+        # Extract the proton spots for all control points
+        proton_spots = []
+        proton_energy = []
+        weights = []
+        control_point_no = 0
+        for beam in ds.IonBeamSequence:
+            for control_point in beam.IonControlPointSequence:
+                print(control_point_no/len(beam.IonControlPointSequence)*100)
+                control_point_no = control_point_no + 1
+                spot_map = control_point.ScanSpotPositionMap
+                #nominal_energy = np.repeat(control_point.NominalBeamEnergy,len(ds.IonBeamSequence[0].IonControlPointSequence[0].ScanSpotPositionMap))
+                proton_spots.append(spot_map)
+                proton_energy.append(control_point.NominalBeamEnergy)
+                weights.append(control_point.ScanSpotMetersetWeights)
+
+        # Convert to arrays
+        proton_spots = np.array(proton_spots)
+        weights = np.array(weights)
+
+        # Print results
+        #print('Proton spots:')
+        #print(proton_spots)
+        #print('Energy:')
+        #print(proton_energy)
+        #print(proton_spots)
+        print('Weights:')
+        print(weights)
         
         
-        control_points = dataset.IonBeamSequence[0].IonControlPointSequence
-        num_control_points = len(control_points)
-        frame_index = 1
-        bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
-        empty = bpy.data.objects['Empty']
-        spots = []
-        for i in range(0, num_control_points, 2): 
-            spots_in_energy_layer = len(dataset.IonBeamSequence[0].IonControlPointSequence[i].ScanSpotPositionMap)
-            weights = control_points[i].ScanSpotMetersetWeights
-            for j in range(0,spots_in_energy_layer,2):
-        
-                    x = control_points[i].ScanSpotPositionMap[j]
-        
-                    y = control_points[i].ScanSpotPositionMap[j+1]
-        
-                    E = control_points[i].NominalBeamEnergy
-                    
-                    print(x,y,E)
-                    if weights[int(j/2)]>0:
-                        empty.location = (x,y,E)
-                        empty.keyframe_insert(data_path="location", frame=frame_index)
-                        frame_index=frame_index + 1
-                        bpy.ops.mesh.primitive_uv_sphere_add(location=(x,y,E), radius=weights[int(j/2)]/10)
-    
+        #print(weights)
         return {"FINISHED"}
 
 
@@ -456,8 +461,10 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
             try:
                 dose_resolution = [ds.PixelSpacing[0]/1000, ds.PixelSpacing[1]/1000, ds.SliceThickness/1000] 
             except:
-                dose_resolution = [1/1000, 1/1000, 1/1000]   
-
+                dose_resolution = [2.5/1000, 2.5/1000, 2/1000]
+                #dose_resolution = [1/1000, 1/1000, 1/1000]   
+            
+            
             #CT origin coordinates (use DICOM coordinates by default, set to zero otherwise)
             try:
                 origin = np.asarray(ds.ImagePositionPatient) 
@@ -478,10 +485,10 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
             grid = openvdb.FloatGrid()
             #Copies image volume from numpy to VDB grid
             grid.copyFromArray(dose_matrix.astype(float))
-        
+            print(dose_resolution)
             #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
             grid.transform = openvdb.createLinearTransform([[dose_resolution[2], 0, 0, 0], [0, dose_resolution[0], 0, 0], [0,0,dose_resolution[1],0], [0,0,0,1]])
-            grid['center'] = (origin[0], origin[1], origin[2])
+            #grid['center'] = (origin[0], origin[1], origin[2])
         
             #Sets the grid class to FOG_VOLUME
             grid.gridClass = openvdb.GridClass.FOG_VOLUME
