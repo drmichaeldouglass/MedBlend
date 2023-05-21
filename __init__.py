@@ -369,7 +369,9 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
             import pydicom
         except:
             print('pydicom not installed')
-
+        
+        import math
+        pi_value = math.pi
         # Read the DICOM file and get the spot positions and weights 
 
         dataset = pydicom.dcmread(file_name_proton) 
@@ -379,44 +381,60 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
         else:
              print('File is not proton plan')
         
-        BeamNo = 1
-        control_points = dataset.IonBeamSequence[BeamNo].IonControlPointSequence
-        num_control_points = len(control_points)
-        #frame_index = 1
-        #bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
-        #empty = bpy.data.objects['Empty']
-        spots = []
-        spot_weights = []
-        for i in range(0, num_control_points, 2): 
-            spots_in_energy_layer = len(dataset.IonBeamSequence[0].IonControlPointSequence[i].ScanSpotPositionMap)
-            weights = control_points[i].ScanSpotMetersetWeights
-            for j in range(0,spots_in_energy_layer,2):
-        
-                    x = control_points[i].ScanSpotPositionMap[j]
-        
-                    y = control_points[i].ScanSpotPositionMap[j+1]
-        
-                    E = float(control_points[i].NominalBeamEnergy)
-                    
-                    W = weights[int(j/2)]
-                    
-                    spots.append((x,y,E))
-                    spot_weights.append((W))
-                    #print(x,y,E)
-                    #if weights[int(j/2)]>0:
-                        #empty.location = (x,y,E)
-                        #empty.keyframe_insert(data_path="location", frame=frame_index)
-                        #frame_index=frame_index + 1
-                        #bpy.ops.mesh.primitive_uv_sphere_add(location=(x,y,E), radius=weights[int(j/2)]/10)
-        print(spots)
-        print(spot_weights)
-        print(np.shape(spot_weights))
-        print(np.shape(spots))
-        
-        mesh = bpy.data.meshes.new('ProtonSpots')
-        mesh.from_pydata(spots, [], [])
-        obj = bpy.data.objects.new('ProtonSpots', mesh)
-        bpy.context.scene.collection.objects.link(obj)
+        BeamNo = 0
+        for beam in dataset.IonBeamSequence:
+            control_points = beam.IonControlPointSequence
+            num_control_points = len(control_points)
+            #frame_index = 1
+            #bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+            #empty = bpy.data.objects['Empty']
+            spots = []
+            spot_weights = []
+            for i in range(0, num_control_points, 2): 
+                spots_in_energy_layer = len(beam.IonControlPointSequence[i].ScanSpotPositionMap)
+                weights = control_points[i].ScanSpotMetersetWeights
+                for j in range(0,spots_in_energy_layer,2):
+            
+                        E = control_points[i].ScanSpotPositionMap[j]/1000
+            
+                        y = control_points[i].ScanSpotPositionMap[j+1]/1000
+            
+                        x = float(control_points[i].NominalBeamEnergy)/1000
+                        
+                        W = weights[int(j/2)]
+                        
+                        spots.append((x,y,E))
+                        spot_weights.append((W,0,0))
+                        #print(x,y,E)
+                        #if weights[int(j/2)]>0:
+                            #empty.location = (x,y,E)
+                            #empty.keyframe_insert(data_path="location", frame=frame_index)
+                            #frame_index=frame_index + 1
+                            #bpy.ops.mesh.primitive_uv_sphere_add(location=(x,y,E), radius=weights[int(j/2)]/10)
+            print(spots)
+            print(spot_weights)
+            print(np.shape(spot_weights))
+            print(np.shape(spots))
+            gantry_angle = float(beam.IonControlPointSequence[0].GantryAngle)
+            iso_center = np.asarray(beam.IonControlPointSequence[0].IsocenterPosition)/1000
+            mesh = bpy.data.meshes.new('ProtonSpots')
+            mesh.from_pydata(spots, [], [])
+            obj = bpy.data.objects.new('ProtonSpots', mesh)
+            
+            bpy.context.scene.collection.objects.link(obj)
+            obj.rotation_euler[1] = gantry_angle*pi_value/180
+            obj.location[0] = iso_center[2]
+            obj.location[1] = iso_center[1]
+            obj.location[2] = iso_center[0]
+            
+            mesh = bpy.data.meshes.new('ProtonWeights')
+            mesh.from_pydata(spot_weights, [], [])
+            obj = bpy.data.objects.new('ProtonWeights', mesh)
+            
+            bpy.context.scene.collection.objects.link(obj)
+
+            
+            
         #print(np.shape(weights))
         return {"FINISHED"}
 
