@@ -136,7 +136,21 @@ def install_python_modules():
     installModule('pydicom')
     #credit to luckychris https://github.com/luckychris
     return 1  
-    
+#This code adapted from https://github.com/simonbroggi/blender_spreadsheet_import
+def add_data_fields(mesh, data_fields):
+    # add custom data
+    for data_field in data_fields:
+        mesh.attributes.new(name=data_field if data_field else "empty_key_string", type='FLOAT', domain='POINT')
+
+def create_object(mesh, name):
+    # Create new object
+    for ob in bpy.context.selected_objects:
+        ob.select_set(False)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    return obj
 
 def check_dicom_image_type(ds):
     """
@@ -389,49 +403,83 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
             #bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
             #empty = bpy.data.objects['Empty']
             spots = []
+            x = []
+            y = []
+            E = []
             spot_weights = []
             for i in range(0, num_control_points, 2): 
                 spots_in_energy_layer = len(beam.IonControlPointSequence[i].ScanSpotPositionMap)
                 weights = control_points[i].ScanSpotMetersetWeights
                 for j in range(0,spots_in_energy_layer,2):
             
-                        E = control_points[i].ScanSpotPositionMap[j]/1000
+                        x.append(control_points[i].ScanSpotPositionMap[j]/1000)
             
-                        y = control_points[i].ScanSpotPositionMap[j+1]/1000
+                        y.append(control_points[i].ScanSpotPositionMap[j+1]/1000)
             
-                        x = float(control_points[i].NominalBeamEnergy)/1000
+                        E.append(float(control_points[i].NominalBeamEnergy)/1000)
                         
-                        W = weights[int(j/2)]
+                        spot_weights.append(weights[int(j/2)])
                         
-                        spots.append((x,y,E))
-                        spot_weights.append((W,0,0))
+                        #spots.append((x,y,E))
+                        #spot_weights.append((W,0,0))
                         #print(x,y,E)
                         #if weights[int(j/2)]>0:
                             #empty.location = (x,y,E)
                             #empty.keyframe_insert(data_path="location", frame=frame_index)
                             #frame_index=frame_index + 1
                             #bpy.ops.mesh.primitive_uv_sphere_add(location=(x,y,E), radius=weights[int(j/2)]/10)
-            print(spots)
-            print(spot_weights)
-            print(np.shape(spot_weights))
-            print(np.shape(spots))
+            #print(spots)
+            #print(spot_weights)
+            #print(np.shape(spot_weights))
+            #print(np.shape(spots))
             gantry_angle = float(beam.IonControlPointSequence[0].GantryAngle)
             iso_center = np.asarray(beam.IonControlPointSequence[0].IsocenterPosition)/1000
-            mesh = bpy.data.meshes.new('ProtonSpots')
-            mesh.from_pydata(spots, [], [])
-            obj = bpy.data.objects.new('ProtonSpots', mesh)
+            #mesh = bpy.data.meshes.new('ProtonSpots')
+            #mesh.from_pydata(spots, [], [])
+            #obj = bpy.data.objects.new('ProtonSpots', mesh)
             
-            bpy.context.scene.collection.objects.link(obj)
+            #bpy.context.scene.collection.objects.link(obj)
+            #obj.rotation_euler[1] = gantry_angle*pi_value/180
+            #obj.location[0] = iso_center[2]
+            #obj.location[1] = iso_center[1]
+            #obj.location[2] = iso_center[0]
+            
+            #mesh = bpy.data.meshes.new('ProtonWeights')
+            #mesh.from_pydata(spot_weights, [], [])
+            #obj = bpy.data.objects.new('ProtonWeights', mesh)
+            
+            #bpy.context.scene.collection.objects.link(obj)
+            mesh = bpy.data.meshes.new(name="proton_spots")
+            
+            data_fields = ['spot_x', 'spot_y', 'spot_E', 'spot_weight']
+            add_data_fields(mesh,data_fields)
+    
+    
+            for row in range(0,np.shape(spot_weights)[0]):
+                    
+                mesh.vertices.add(1)
+                mesh.update() #might be slow, but does it matter?...
+                # assign row values to mesh attribute values
+                for data_field in data_fields:
+                    mesh.attributes['spot_x'].data[row].value = x[row]
+                    mesh.attributes['spot_y'].data[row].value = y[row]
+                    mesh.attributes['spot_E'].data[row].value = E[row]
+                    mesh.attributes['spot_weight'].data[row].value = spot_weights[row]
+                mesh.vertices[row].co = (0.01 * row,0.0,0.0) # set vertex x position according to index
+            
+            mesh.update()
+            mesh.validate()
+        
+                # create object if data was imported
+            if (len(mesh.vertices) > 0):
+                obj = create_object(mesh, ['proton_spots' + str(BeamNo)][0])
+            
             obj.rotation_euler[1] = gantry_angle*pi_value/180
-            obj.location[0] = iso_center[2]
+            obj.location[0] = iso_center[0]
             obj.location[1] = iso_center[1]
-            obj.location[2] = iso_center[0]
+            obj.location[2] = iso_center[2]
             
-            mesh = bpy.data.meshes.new('ProtonWeights')
-            mesh.from_pydata(spot_weights, [], [])
-            obj = bpy.data.objects.new('ProtonWeights', mesh)
-            
-            bpy.context.scene.collection.objects.link(obj)
+            BeamNo = BeamNo + 1
 
             
             
