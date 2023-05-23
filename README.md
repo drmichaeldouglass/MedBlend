@@ -1,6 +1,5 @@
 
-
-![MedBlend Github](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/205aba5f-ce11-4b02-ae45-aafb9a5584c4)
+![MedBlend Github](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/f6f528d8-8ca4-4751-bb98-605cc984d949)
 
 
 # MedBlend 
