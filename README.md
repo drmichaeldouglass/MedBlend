@@ -1,6 +1,7 @@
 
 
-![Colorful People Humanity Company Logo](https://user-images.githubusercontent.com/52724915/226303048-6ed4e906-02cc-4d68-aa9e-d22bdbb490e4.png)
+![MedBlend Github](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/205aba5f-ce11-4b02-ae45-aafb9a5584c4)
+
 
 # MedBlend 
 A Medical Visualisation Add-On for Blender
