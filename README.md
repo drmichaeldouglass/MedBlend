@@ -1,6 +1,4 @@
-
-![MedBlend Github](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/f6f528d8-8ca4-4751-bb98-605cc984d949)
-
+![MedBlend Github](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/89374481-2c19-4142-9724-446e2286ad9a)
 
 # MedBlend 
 A Medical Visualisation Add-On for Blender
