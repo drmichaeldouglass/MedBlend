@@ -51,6 +51,7 @@ import site
 
 #Custom Packages
 from .proton import is_proton_plan
+from . import node_groups
 
 try:
     import pydicom
@@ -709,4 +710,4 @@ def unregister():
     bpy.utils.unregister_class(install_python_dependancies)
     
     
-register()
+#register()

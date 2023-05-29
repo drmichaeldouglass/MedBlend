@@ -1,3 +1,7 @@
+import bpy
+import os
+from . constants import ADDON_DIR
+
 def is_proton_plan(ds):
     """
     Checks if the DICOM file at the given path is of type dose.
@@ -10,3 +14,4 @@ def is_proton_plan(ds):
             return False
     except:
         return False
+
