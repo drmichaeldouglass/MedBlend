@@ -5,6 +5,11 @@ A Medical Visualisation Add-On for Blender
 
 > This project is still in development. The code provided here is still being developed and has not been optimised yet
 
+![GitHub all releases](https://img.shields.io/github/downloads/drmichaeldouglass/MedBlend/total?style=social)
+![GitHub Repo stars](https://img.shields.io/github/stars/drmichaeldouglass/medblend?style=social)
+![GitHub User's stars](https://img.shields.io/github/stars/drmichaeldouglass?label=User%20Stars&style=social)
+
+
 ## Introduction
 
 ## Intended Use
