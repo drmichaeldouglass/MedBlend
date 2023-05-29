@@ -48,6 +48,10 @@ import subprocess
 import sys
 import site
 
+
+#Custom Packages
+from .proton import is_proton_plan
+
 try:
     import pydicom
 except:
@@ -63,18 +67,7 @@ def verify_user_sitepackages(mda_path):
     if os.path.exists(mda_path) and mda_path not in sys.path:
         sys.path.append(mda_path)
 
-def is_proton_plan(ds):
-    """
-    Checks if the DICOM file at the given path is of type dose.
-    Returns True if it is, False otherwise.
-    """
-    try:
-        if ds.Modality == 'RTIon':
-            return True
-        else:
-            return False
-    except:
-        return False
+
     
 def is_dose_file(ds):
     """
