@@ -51,7 +51,7 @@ import site
 
 #Custom Packages
 from .proton import is_proton_plan
-from . import node_groups
+from .node_groups import apply_dose_shader, apply_image_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
 
 try:
     import pydicom
@@ -364,7 +364,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             #images_loaded = True
         else:
            print('No DICOM images loaded')
-        
+        apply_image_shader()
         return {"FINISHED"}
 
 
@@ -485,7 +485,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
             obj.location[2] = iso_center[2]
             
             BeamNo = BeamNo + 1
-
+            add_proton_geo_nodes()
             
             
         #print(np.shape(weights))
@@ -585,7 +585,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
             dose_loaded = True
         else:
             print('No Dose File Loaded')
-        
+        apply_dose_shader()
         
         return {"FINISHED"}
 

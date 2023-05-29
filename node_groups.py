@@ -339,7 +339,7 @@ def proton_spots_node_group():
     proton_spots.outputs.new('NodeSocketGeometry', "Geometry")
     proton_spots.outputs[0].attribute_domain = 'POINT'    
     #node Group Output
-    group_output = proton_spots.nodes.new("NodeGroupOutput)")
+    group_output = proton_spots.nodes.new("NodeGroupOutput")
     #node Named Attribute
     named_attribute = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
     named_attribute.data_type = 'FLOAT'
@@ -378,7 +378,7 @@ def proton_spots_node_group():
     #Selection
     set_position.inputs[1].default_value = True
     #Offset
-    set_position.inputs[3].default_value = (0.0, 0.0, 0.)   
+    set_position.inputs[3].default_value = (0.0, 0.0, 0.0)   
     #node Mesh to Points
     mesh_to_points = proton_spots.nodes.new("GeometryNodeMeshToPoints")
     mesh_to_points.mode = 'VERTICES'
