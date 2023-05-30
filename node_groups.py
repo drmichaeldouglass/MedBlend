@@ -332,53 +332,32 @@ def add_CT_to_volume_geo_nodes():
 
 
 def proton_spots_node_group():
-    proton_spots= bpy.data.node_groups.new(type = "GeometryNodeTree", name = "Proton_Spots")    
+    proton_spots= bpy.data.node_groups.new(type = "GeometryNodeTree", name = "Proton_Spots")
+
     #initialize proton_spots nodes
     #proton_spots outputs
     #output Geometry
     proton_spots.outputs.new('NodeSocketGeometry', "Geometry")
-    proton_spots.outputs[0].attribute_domain = 'POINT'    
+    proton_spots.outputs[0].attribute_domain = 'POINT'
+
+
     #node Group Output
     group_output = proton_spots.nodes.new("NodeGroupOutput")
-    #node Named Attribute
-    named_attribute = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-    named_attribute.data_type = 'FLOAT'
-    #Name
-    named_attribute.inputs[0].default_value = "spot_x"    
-    #node Named Attribute.001
-    named_attribute_001 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-    named_attribute_001.data_type = 'FLOAT'
-    #Name
-    named_attribute_001.inputs[0].default_value = "spot_y"    
+
     #node Combine XYZ
-    combine_xyz = proton_spots.nodes.new("ShaderNodeCombineXYZ") 
+    combine_xyz = proton_spots.nodes.new("ShaderNodeCombineXYZ")
+
     #node Set Point Radius
     set_point_radius = proton_spots.nodes.new("GeometryNodeSetPointRadius")
     #Selection
-    set_point_radius.inputs[1].default_value = True 
-    #node Named Attribute.002
-    named_attribute_002 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-    named_attribute_002.data_type = 'FLOAT'
-    #Name
-    named_attribute_002.inputs[0].default_value = "spot_E"    
-    #node Named Attribute.003
-    named_attribute_003 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-    named_attribute_003.data_type = 'FLOAT'
-    #Name
-    named_attribute_003.inputs[0].default_value = "spot_weight"    
+    set_point_radius.inputs[1].default_value = True
+
     #node Math
     math = proton_spots.nodes.new("ShaderNodeMath")
     math.operation = 'MULTIPLY'
-    #Value_001
-    math.inputs[1].default_value = 0.004999999888241291
     #Value_002
-    math.inputs[2].default_value = 0    
-    #node Set Position
-    set_position = proton_spots.nodes.new("GeometryNodeSetPosition")
-    #Selection
-    set_position.inputs[1].default_value = True
-    #Offset
-    set_position.inputs[3].default_value = (0.0, 0.0, 0.0)   
+    math.inputs[2].default_value = 0.5
+
     #node Mesh to Points
     mesh_to_points = proton_spots.nodes.new("GeometryNodeMeshToPoints")
     mesh_to_points.mode = 'VERTICES'
@@ -387,40 +366,112 @@ def proton_spots_node_group():
     #Position
     mesh_to_points.inputs[2].default_value = (0.0, 0.0, 0.0)
     #Radius
-    mesh_to_points.inputs[3].default_value = 0.050000000745058    
+    mesh_to_points.inputs[3].default_value = 0.05000000074505806
+
+    #node Set Position
+    set_position = proton_spots.nodes.new("GeometryNodeSetPosition")
+    #Selection
+    set_position.inputs[1].default_value = True
+    #Offset
+    set_position.inputs[3].default_value = (0.0, 0.0, 0.0)
+
+    #node Named Attribute.002
+    named_attribute_002 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute_002.data_type = 'FLOAT'
+    #Name
+    named_attribute_002.inputs[0].default_value = "spot_E"
+
+    #node Named Attribute.001
+    named_attribute_001 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute_001.data_type = 'FLOAT'
+    #Name
+    named_attribute_001.inputs[0].default_value = "spot_y"
+
+    #node Named Attribute
+    named_attribute = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute.data_type = 'FLOAT'
+    #Name
+    named_attribute.inputs[0].default_value = "spot_x"
+
+    #node Named Attribute.003
+    named_attribute_003 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute_003.data_type = 'FLOAT'
+    #Name
+    named_attribute_003.inputs[0].default_value = "spot_weight"
+
+    #node Set Material
+    set_material = proton_spots.nodes.new("GeometryNodeSetMaterial")
+    #Selection
+    set_material.inputs[1].default_value = True
+
+    #node Reroute
+    reroute = proton_spots.nodes.new("NodeReroute")
+    #node Reroute.001
+    reroute_001 = proton_spots.nodes.new("NodeReroute")
+    #node Reroute.002
+    reroute_002 = proton_spots.nodes.new("NodeReroute")
+    #node Reroute.003
+    reroute_003 = proton_spots.nodes.new("NodeReroute")
     #proton_spots inputs
     #input Geometry
     proton_spots.inputs.new('NodeSocketGeometry', "Geometry")
-    proton_spots.inputs[0].attribute_domain = 'POINT'    
+    proton_spots.inputs[0].attribute_domain = 'POINT'
+
+    #input Spot Scale
+    proton_spots.inputs.new('NodeSocketFloat', "Spot Scale")
+    proton_spots.inputs[1].default_value = 0.004999999888241291
+    proton_spots.inputs[1].min_value = 0.0
+    proton_spots.inputs[1].max_value = 10000.0
+    proton_spots.inputs[1].attribute_domain = 'POINT'
+
+    #input Spot Material
+    proton_spots.inputs.new('NodeSocketMaterial', "Spot Material")
+    proton_spots.inputs[2].attribute_domain = 'POINT'
+
+
     #node Group Input
-    group_input = proton_spots.nodes.new("NodeGroupInput")    
+    group_input = proton_spots.nodes.new("NodeGroupInput")
+
+
     #Set locations
-    group_output.location = (898.049072265625, 0.0)
-    named_attribute.location = (-493.59490966796875, -106.22846984863281)
-    named_attribute_001.location = (-492.8028869628906, -245.0679473876953)
+    group_output.location = (1118.049072265625, 0.0)
     combine_xyz.location = (-265.6595153808594, -81.25477600097656)
     set_point_radius.location = (678.049072265625, 12.603246688842773)
-    named_attribute_002.location = (-499.13934326171875, -364.0732421875)
-    named_attribute_003.location = (18.016016006469727, -267.62384033203125)
     math.location = (458.4000244140625, -125.39117431640625)
-    set_position.location = (214.10635375976562, 45.071815490722656)
-    mesh_to_points.location = (-112.13887786865234, 107.3757095336914)
-    group_input.location = (-408.6219177246094, 60.2473754882812)    
+    mesh_to_points.location = (-53.903465270996094, 134.82223510742188)
+    set_position.location = (217.53195190429688, 58.795074462890625)
+    named_attribute_002.location = (-495.7137145996094, -390.662109375)
+    named_attribute_001.location = (-497.9413146972656, -248.49874877929688)
+    named_attribute.location = (-495.3077087402344, -111.37471008300781)
+    named_attribute_003.location = (-177.2443084716797, -278.77398681640625)
+    set_material.location = (898.3999633789062, 25.0797061920166)
+    reroute.location = (-230.80581665039062, 2.1794981956481934)
+    reroute_001.location = (-231.6152801513672, 183.9936981201172)
+    reroute_002.location = (847.4681396484375, 186.56826782226562)
+    reroute_003.location = (852.2462768554688, -74.28929138183594)
+    group_input.location = (-490.8133850097656, 82.06087493896484)
+
     #Set dimensions
     group_output.width, group_output.height = 140.0, 100.0
-    named_attribute.width, named_attribute.height = 140.0, 100.0
-    named_attribute_001.width, named_attribute_001.height = 140.0, 100.0
     combine_xyz.width, combine_xyz.height = 140.0, 100.0
     set_point_radius.width, set_point_radius.height = 140.0, 100.0
-    named_attribute_002.width, named_attribute_002.height = 140.0, 100.0
-    named_attribute_003.width, named_attribute_003.height = 140.0, 100.0
     math.width, math.height = 140.0, 100.0
-    set_position.width, set_position.height = 140.0, 100.0
     mesh_to_points.width, mesh_to_points.height = 140.0, 100.0
-    group_input.width, group_input.height = 140.0, 100.0    
+    set_position.width, set_position.height = 140.0, 100.0
+    named_attribute_002.width, named_attribute_002.height = 140.0, 100.0
+    named_attribute_001.width, named_attribute_001.height = 140.0, 100.0
+    named_attribute.width, named_attribute.height = 140.0, 100.0
+    named_attribute_003.width, named_attribute_003.height = 255.61465454101562, 100.0
+    set_material.width, set_material.height = 140.0, 100.0
+    reroute.width, reroute.height = 16.0, 100.0
+    reroute_001.width, reroute_001.height = 16.0, 100.0
+    reroute_002.width, reroute_002.height = 16.0, 100.0
+    reroute_003.width, reroute_003.height = 16.0, 100.0
+    group_input.width, group_input.height = 140.0, 100.0
+
     #initialize proton_spots links
-    #set_point_radius.Points -> group_output.Geometry
-    proton_spots.links.new(set_point_radius.outputs[0], group_output.inputs[0])
+    #set_material.Geometry -> group_output.Geometry
+    proton_spots.links.new(set_material.outputs[0], group_output.inputs[0])
     #mesh_to_points.Points -> set_position.Geometry
     proton_spots.links.new(mesh_to_points.outputs[0], set_position.inputs[0])
     #named_attribute.Attribute -> combine_xyz.X
@@ -439,6 +490,20 @@ def proton_spots_node_group():
     proton_spots.links.new(math.outputs[0], set_point_radius.inputs[2])
     #named_attribute_003.Attribute -> math.Value
     proton_spots.links.new(named_attribute_003.outputs[1], math.inputs[0])
+    #group_input.Spot Scale -> math.Value
+    proton_spots.links.new(group_input.outputs[1], math.inputs[1])
+    #set_point_radius.Points -> set_material.Geometry
+    proton_spots.links.new(set_point_radius.outputs[0], set_material.inputs[0])
+    #reroute_003.Output -> set_material.Material
+    proton_spots.links.new(reroute_003.outputs[0], set_material.inputs[2])
+    #group_input.Spot Material -> reroute.Input
+    proton_spots.links.new(group_input.outputs[2], reroute.inputs[0])
+    #reroute.Output -> reroute_001.Input
+    proton_spots.links.new(reroute.outputs[0], reroute_001.inputs[0])
+    #reroute_001.Output -> reroute_002.Input
+    proton_spots.links.new(reroute_001.outputs[0], reroute_002.inputs[0])
+    #reroute_002.Output -> reroute_003.Input
+    proton_spots.links.new(reroute_002.outputs[0], reroute_003.inputs[0])
     return proton_spots
 
 def add_proton_geo_nodes():
