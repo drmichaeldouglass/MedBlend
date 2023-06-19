@@ -9,6 +9,8 @@ A Medical Visualisation Add-On for Blender
 ![GitHub Repo stars](https://img.shields.io/github/stars/drmichaeldouglass/medblend?style=social)
 ![GitHub User's stars](https://img.shields.io/github/stars/drmichaeldouglass?label=User%20Stars&style=social)
 
+Help support the development of MedBlend via my GoFundMe:
+https://gofund.me/e2a4256c
 
 ## Introduction
 
@@ -146,12 +148,6 @@ Visulise brachytherapy dwell point positions and dwell times
 
 MedBlend: A Medical Visualisation Add-On for Blender, M.Douglass
 https://github.com/drmichaeldouglass/MedBlend
-
-
-## Support the development of MedBlend via PayPal
-![download](https://user-images.githubusercontent.com/52724915/220474865-3edb00ea-9582-450d-9fb1-e6414b4e8db3.png)
-
-
 
 ## References
 
