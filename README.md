@@ -9,8 +9,6 @@ A Medical Visualisation Add-On for Blender
 ![GitHub Repo stars](https://img.shields.io/github/stars/drmichaeldouglass/medblend?style=social)
 ![GitHub User's stars](https://img.shields.io/github/stars/drmichaeldouglass?label=User%20Stars&style=social)
 
-Help support the development of MedBlend via my GoFundMe:
-https://gofund.me/e2a4256c
 
 ## Introduction
 
