@@ -104,6 +104,10 @@ To change the material properties, select the Shading tab from the top edge and 
 
 ![materials3](https://user-images.githubusercontent.com/52724915/226318971-e3f63834-0569-43a0-8828-2ea77c7fe8cd.png)
 
+Generally, DICOM CT is not normalised and pixel values (Hounsfield units) can range from -1000 to > 2000 usually. A value of -10000 generally indicates air density, a value of 0 indicates water density and bone and other high density materials have values >1000. To account for this in the shader material, it may be necessary to add a Map Range node after the volume info node and setting the maximum and miniumum input values to suit your specific dataset. 
+
+![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
+
 
 Here are some examples:
 
@@ -123,11 +127,10 @@ A test proton therapy plan on a phantom. The CT images, dose distribution and pr
 
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
-- CT, Dose and Structure locations are not co-registered yet (user needs to manually align them at the moment).
+- CT, Dose and Structure locations are not perfectly co-registered yet (user may need to manually align them at the moment).
 - After installing the python modules, the DICOM functions sometimes do not appear. This can be fixed by restarting Blender.
 
 Please report any bugs as an issue on this repository
-
 
 ## Future Updates
 
