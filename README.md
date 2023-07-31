@@ -94,11 +94,11 @@ MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Loa
 
 ## How to add Materials to the CT and dose volumes
 
-Some default materials have been included in the github repository in the assets folder and then assets.blend. Download this blender file. In blender, once you have imported your CT or dose volumes, go to the file menu --> append and find the assets.blend file. Go to the materials sub-folder and select Image Material and Dose Material. This will import the default materials so that they become available in Blender. 
+Some default materials for CT, MRI and Dose volumes have been included in this add-on. When a DICOM image or DICOM dose volume is imported, a default material is automatically created. Select the materials menu from the menu on the right side, and select either Image Material for CT volumes or Dose Material for dose volumes. 
+
+![materials](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/baf02ebf-5781-4c84-8884-39ff74582adf)
 
 With the CT or dose object selected in the outliner (top right), go to the shader/material menu (red icon in lower right) and select either the Image Material or Dose Material depending on what type of volume you have imported.
-
-![materials2](https://user-images.githubusercontent.com/52724915/226318074-58e686b0-bad9-4daf-bdbe-f2dae06c7463.png)
 
 To change the material properties, select the Shading tab from the top edge and you should see the Material node setup shown in the bottom panel. MedBlend works with both the Eevee and Cycles render engines but Cycles generally produces better results without too many changes. You can change from Eevee to Cycles from the panel on the right. From the material nodes (shown in panel at the bottom), the brightness of the volume can be changed by increasing the "multiply" value. The pixel threshold can be adjusted by moving the slider points in the colour ramp node. 
 
