@@ -108,6 +108,24 @@ Generally, DICOM CT is not normalised and pixel values (Hounsfield units) can ra
 
 ![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
 
+## Converting CT volumes into a mesh
+
+Rather than viewing the DICOM data as a volume, it is possible to convert the CT data into a mesh. This can be performed by apply the volume to mesh modifier in Blender. 
+
+Start by creating a place-holder object. From the add menu, add a cube into the scene. This cube object will hold the volume to mesh modifier. 
+
+![add_cube](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/9f842bce-1a6a-4c7d-8334-1a4c86373e0c)
+
+With the cube selected, go to the modifer menu, select Add Modifier and add a Volume to Mesh modifier.
+![volume_to_mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/7f940498-9199-4bc3-b13e-75f76834846a)
+
+From the object property, select the CT volume. Depending on the normalisation of the volume, you will need to adjust the threshold to visulise the data. For most CT data, a threshold value of 100 is a good starting point
+
+![volume_to_mesh_select_CT](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/decbcaab-e009-4f8a-b5a3-eb1d1cec4795)
+
+This is what the mesh should look like with a threshold set to 100. You can apply this modifier from the Volume to Mesh modifier panel to bake the mesh which will allow for manual adjustments.
+
+![CT_Mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/c8b74c1d-baa3-4962-b29e-5eff716fb3f8)
 
 Here are some examples:
 
