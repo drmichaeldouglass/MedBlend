@@ -139,6 +139,8 @@ def install_python_modules():
            # install required packages
             subprocess.call([python_exe, "-m", "pip", "install", packageName])
     installModule('pydicom')
+    installModule('platipy')
+    
     #credit to luckychris https://github.com/luckychris
     return 1  
 #This code adapted from https://github.com/simonbroggi/blender_spreadsheet_import
