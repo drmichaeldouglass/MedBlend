@@ -598,7 +598,6 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
     bl_description = "Load a DICOM Structure Set"
     bl_options = {"REGISTER", "UNDO"}
     filter_glob: bpy.props.StringProperty( default='*.dcm', options={'HIDDEN'} )
-
     @classmethod
     def poll(cls, context):
         if bpy.app.version >= (3, 0, 0) and True:
@@ -606,58 +605,114 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         return not False
 
     def execute(self, context):
-        file_name_struct = self.filepath
+        
+        from pathlib import Path
+        structure_path  = self.filepath
 
         try:
             import pydicom
+            import platipy
+            from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
+            from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
         except:
             print('pydicom not installed')
 
-        dicom_data = pydicom.dcmread(file_name_struct) 
+        # Assume structure_file_path is the path to the structure file specified by the user
+        structure_file_path = Path(structure_path)
         
-        if is_structure_file(dicom_data):
+        # Get the directory of the structure file
+        structure_directory = structure_file_path.parent
+        directory_path = structure_directory
+        print(structure_path)
+        print(directory_path)
+        DICOM_IMAGE = read_dicom_image(directory_path)
+
+
+        dicom_structure = pydicom.dcmread(structure_path)
+
+        struct_masks, struct_names =  transform_point_set_from_dicom_struct(DICOM_IMAGE, dicom_structure, spacing_override=None)
+
+        # Initialize an empty volume for all structure masks
+        all_struct_masks = np.zeros_like(struct_masks[0])
+
+        # Assign each mask a unique integer value
+        for i, mask in enumerate(struct_masks, start=1):
+            all_struct_masks[mask] = i
+
+        #Creates a grid of Double precision
+        grid = openvdb.FloatGrid()
+        #Copies image volume from numpy to VDB grid
+        grid.copyFromArray(all_struct_masks.astype(float))
+
+        #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
+        #grid.transform = openvdb.createLinearTransform([[dose_resolution[2], 0, 0, 0], [0, dose_resolution[0], 0, 0], [0,0,dose_resolution[1],0], [0,0,0,1]])
+        #grid['center'] = (origin[0], origin[1], origin[2])
+    
+        #Sets the grid class to FOG_VOLUME
+        grid.gridClass = openvdb.GridClass.FOG_VOLUME
+        #Blender needs grid name to be "Density"
+        grid.name='density'
+    
+        struct_dir = structure_directory.joinpath('structs.vdb')
+        #Writes CT volume to a vdb file but perhaps this could be done internally in the future
+        openvdb.write(str(struct_dir),grid)
+    
+        # Add the volume to the scene
+        bpy.ops.object.volume_import(filepath=str(struct_dir), files=[])
+        #DICOM_object = easybpy.get_selected_object()
+        # Set the volume's origin to match the DICOM image position
+        #bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
+        dose_loaded = True
         
         
-            # Extract the contour data from the structure file 
-            contours = [] 
-            structure_name = []
-            for i,structure in enumerate(dicom_data.ROIContourSequence): 
-                points = [] 
-                structure_name.append(dicom_data.StructureSetROISequence[i].ROIName)
-                for contour in structure.ContourSequence: 
+        print(struct_names)
+
+# Now dicom_files contains the paths to the DICOM structure files
+        
+        
+        # if is_structure_file(dicom_data):
+        
+        
+        #     # Extract the contour data from the structure file 
+        #     contours = [] 
+        #     structure_name = []
+        #     for i,structure in enumerate(dicom_data.ROIContourSequence): 
+        #         points = [] 
+        #         structure_name.append(dicom_data.StructureSetROISequence[i].ROIName)
+        #         for contour in structure.ContourSequence: 
         
                     
         
-                    for i in range(0, len(contour.ContourData), 3): 
+        #             for i in range(0, len(contour.ContourData), 3): 
         
-                        x = contour.ContourData[i+2]/1000
+        #                 x = contour.ContourData[i+2]/1000
         
-                        y = contour.ContourData[i+1]/1000
+        #                 y = contour.ContourData[i+1]/1000
         
-                        z = contour.ContourData[i]/1000
+        #                 z = contour.ContourData[i]/1000
         
-                        points.append((x, y, z)) 
+        #                 points.append((x, y, z)) 
         
-                contours.append(points) 
+        #         contours.append(points) 
         
         
-            # Convert the contours into mesh objects 
-            bpy.ops.object.select_all(action='DESELECT')  
-            for j,contour in enumerate(contours):  
+        #     # Convert the contours into mesh objects 
+        #     bpy.ops.object.select_all(action='DESELECT')  
+        #     for j,contour in enumerate(contours):  
         
-                mesh = bpy.data.meshes.new(name="DICOM Structure") 
+        #         mesh = bpy.data.meshes.new(name="DICOM Structure") 
         
-                mesh.from_pydata(contour, [], []) 
+        #         mesh.from_pydata(contour, [], []) 
         
-                object = bpy.data.objects.new(structure_name[j], mesh)
+        #         object = bpy.data.objects.new(structure_name[j], mesh)
                 
                 
-                bpy.context.collection.objects.link(object)
-                bpy.data.objects[object.name].select_set(True)
-                bpy.context.view_layer.objects.active = object
+        #         bpy.context.collection.objects.link(object)
+        #         bpy.data.objects[object.name].select_set(True)
+        #         bpy.context.view_layer.objects.active = object
         
-        else:
-            print('No DICOM Structure Loaded')
+        #else:
+            #print('No DICOM Structure Loaded')
 
         return {"FINISHED"}
     
