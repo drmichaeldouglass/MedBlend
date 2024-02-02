@@ -56,7 +56,7 @@ from .node_groups import apply_dose_shader, apply_image_shader, add_CT_to_volume
 try:
     import pydicom
 except:
-    print('pydicom not installed')
+    print('Modules not installed')
 
 #from bpy.props import StringProperty, BoolProperty, EnumProperty
 
@@ -95,6 +95,25 @@ def is_structure_file(ds):
             return False
     except:
         return False
+
+def check_dependencies():
+    def is_module_installed(module_name):
+        try:
+            __import__(module_name)
+            return True
+        except ImportError:
+            return False
+    current_path = bpy.path.abspath(os.path.dirname(__file__))
+    with open(current_path+'/requirements.txt') as f:
+        for line in f:
+            module_name = line.strip().split('==')[0]  # Remove version if present
+            #print('Checking for module:', module_name)
+            if not is_module_installed(module_name):
+                print(f"Module '{module_name}' is not installed")
+
+                return False  # Return 0 as soon as a missing module is found
+
+    return True  # Return 1 if all modules are installed
 
 def install_python_modules():
 
@@ -138,8 +157,13 @@ def install_python_modules():
             subprocess.call([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
            # install required packages
             subprocess.call([python_exe, "-m", "pip", "install", packageName])
-    installModule('pydicom')
-    installModule('platipy')
+    current_path = bpy.path.abspath(os.path.dirname(__file__))
+    with open(current_path+'/requirements.txt') as f:
+        for line in f:
+            # Strip off any whitespace and ignore empty lines
+            module = line.strip()
+            if module:
+                installModule(module)
     
     #credit to luckychris https://github.com/luckychris
     return 1  
@@ -266,8 +290,7 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        try:
-            import pydicom
+        if check_dependencies():
             layout.label(text='Images', icon_value=125)
             op = layout.operator('sna.load_ct_fc7b9', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
             layout.label(text='Dose', icon_value=851)
@@ -277,11 +300,11 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
             layout.label(text='Proton Spots', icon_value=653)
             op = layout.operator('sna.load_proton_1dbc6', text='Load Proton Plan', icon_value=0, emboss=True, depress=False)
 
-        except ModuleNotFoundError:
+        else:
             layout.label(text='Install Python Dependancies', icon_value=0)
             op = layout.operator('sna.install_python_dependancies', text='Install Dependancies', icon_value=0, emboss=True, depress=False)
 
-            print("module 'pydicom' is not installed")
+            #print("module 'pydicom' is not installed")
 
 
 
@@ -305,7 +328,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
         try:
             import pydicom
         except:
-            print('pydicom not installed')
+            print('Modules Not Installed')
 
         selected_file = pydicom.dcmread(file_name_CT)
         if check_dicom_image_type(selected_file):
@@ -389,7 +412,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
         try:
             import pydicom
         except:
-            print('pydicom not installed')
+            print('Modules not installed')
         
         import math
         pi_value = math.pi
@@ -513,7 +536,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
         try:
             import pydicom
         except:
-            print('pydicom not installed')
+            print('Modules not installed')
         
         #Directory containing DICOM images
         DICOM_dir = file_name_dose
@@ -614,8 +637,9 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
             import platipy
             from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
             from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
+            import SimpleITK as sitk
         except:
-            print('pydicom not installed')
+            print('Modules not installed')
 
         # Assume structure_file_path is the path to the structure file specified by the user
         structure_file_path = Path(structure_path)
@@ -626,93 +650,50 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         print(structure_path)
         print(directory_path)
         DICOM_IMAGE = read_dicom_image(directory_path)
-
+        voxel_resolution = DICOM_IMAGE.GetSpacing()
+        origin = DICOM_IMAGE.GetOrigin()
 
         dicom_structure = pydicom.dcmread(structure_path)
 
-        struct_masks, struct_names =  transform_point_set_from_dicom_struct(DICOM_IMAGE, dicom_structure, spacing_override=None)
-
-        # Initialize an empty volume for all structure masks
-        all_struct_masks = np.zeros_like(struct_masks[0])
-
-        # Assign each mask a unique integer value
-        for i, mask in enumerate(struct_masks, start=1):
-            all_struct_masks[mask] = i
-
-        #Creates a grid of Double precision
-        grid = openvdb.FloatGrid()
-        #Copies image volume from numpy to VDB grid
-        grid.copyFromArray(all_struct_masks.astype(float))
-
-        #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
-        #grid.transform = openvdb.createLinearTransform([[dose_resolution[2], 0, 0, 0], [0, dose_resolution[0], 0, 0], [0,0,dose_resolution[1],0], [0,0,0,1]])
-        #grid['center'] = (origin[0], origin[1], origin[2])
+        struct_masks, struct_names =  transform_point_set_from_dicom_struct(DICOM_IMAGE, dicom_structure)#, spacing_override=(5,5,5))
+        
+        for i in range(0,len(struct_masks)):
+            numpy_image = sitk.GetArrayFromImage(struct_masks[i])
+            
+            print('Structure Name:', struct_names[i])
+            print('Structure Shape:', np.shape(numpy_image))
+            print('Structure Voxel Resolution:', voxel_resolution)
+            print('Structure Origin:', origin)
+            
     
-        #Sets the grid class to FOG_VOLUME
-        grid.gridClass = openvdb.GridClass.FOG_VOLUME
-        #Blender needs grid name to be "Density"
-        grid.name='density'
+            #Creates a grid of Double precision
+            grid = openvdb.FloatGrid()
+            #Copies image volume from numpy to VDB grid
+            grid.copyFromArray(numpy_image.astype(float))
     
-        struct_dir = structure_directory.joinpath('structs.vdb')
-        #Writes CT volume to a vdb file but perhaps this could be done internally in the future
-        openvdb.write(str(struct_dir),grid)
-    
-        # Add the volume to the scene
-        bpy.ops.object.volume_import(filepath=str(struct_dir), files=[])
-        #DICOM_object = easybpy.get_selected_object()
-        # Set the volume's origin to match the DICOM image position
-        #bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
-        dose_loaded = True
+            #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
+            grid.transform = openvdb.createLinearTransform([[voxel_resolution[2]/1000, 0, 0, 0], [0, voxel_resolution[0]/1000, 0, 0], [0,0,voxel_resolution[1]/1000,0], [0,0,0,1]])
+            #grid['center'] = (origin[0], origin[1], origin[2])
         
+            #Sets the grid class to FOG_VOLUME
+            grid.gridClass = openvdb.GridClass.FOG_VOLUME
+            #Blender needs grid name to be "Density"
+            grid.name='density'
         
-        print(struct_names)
-
-# Now dicom_files contains the paths to the DICOM structure files
+            struct_dir = structure_directory.joinpath('structs.vdb')
+            struct_dir = structure_directory.joinpath(f'{struct_names[i]}.vdb')
+            #Writes CT volume to a vdb file but perhaps this could be done internally in the future
+            openvdb.write(str(struct_dir),grid)
         
-        
-        # if is_structure_file(dicom_data):
-        
-        
-        #     # Extract the contour data from the structure file 
-        #     contours = [] 
-        #     structure_name = []
-        #     for i,structure in enumerate(dicom_data.ROIContourSequence): 
-        #         points = [] 
-        #         structure_name.append(dicom_data.StructureSetROISequence[i].ROIName)
-        #         for contour in structure.ContourSequence: 
-        
-                    
-        
-        #             for i in range(0, len(contour.ContourData), 3): 
-        
-        #                 x = contour.ContourData[i+2]/1000
-        
-        #                 y = contour.ContourData[i+1]/1000
-        
-        #                 z = contour.ContourData[i]/1000
-        
-        #                 points.append((x, y, z)) 
-        
-        #         contours.append(points) 
-        
-        
-        #     # Convert the contours into mesh objects 
-        #     bpy.ops.object.select_all(action='DESELECT')  
-        #     for j,contour in enumerate(contours):  
-        
-        #         mesh = bpy.data.meshes.new(name="DICOM Structure") 
-        
-        #         mesh.from_pydata(contour, [], []) 
-        
-        #         object = bpy.data.objects.new(structure_name[j], mesh)
-                
-                
-        #         bpy.context.collection.objects.link(object)
-        #         bpy.data.objects[object.name].select_set(True)
-        #         bpy.context.view_layer.objects.active = object
-        
-        #else:
-            #print('No DICOM Structure Loaded')
+            # Add the volume to the scene
+            bpy.ops.object.volume_import(filepath=str(struct_dir), files=[])
+            #DICOM_object = easybpy.get_selected_object()
+            # Set the volume's origin to match the DICOM image position
+            #bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
+            dose_loaded = True
+            
+            
+            #print(struct_names[i])
 
         return {"FINISHED"}
     
