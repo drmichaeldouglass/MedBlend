@@ -51,22 +51,24 @@ import site
 
 #Custom Packages
 from .proton import is_proton_plan
+from .dicom_util import (
+    check_dicom_image_type, 
+    is_structure_file, 
+    is_dose_file, 
+    load_dicom_images, 
+    rescale_DICOM_image, 
+    sort_by_instance_number, 
+    extract_dicom_data, 
+    filter_by_series_uid
+)
 from .node_groups import apply_dose_shader, apply_image_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
+from .blender_utils import add_data_fields, create_object
+from .install_modules import verify_user_sitepackages, install_python_modules, check_dependencies
+#try:
+#    import pydicom
+#except:
+#    print('Modules not installed')
 
-try:
-    import pydicom
-except:
-    print('Modules not installed')
-
-#from bpy.props import StringProperty, BoolProperty, EnumProperty
-
-def verify_user_sitepackages(mda_path):
-    usersitepackagespath = site.getusersitepackages()
-
-    if os.path.exists(usersitepackagespath) and usersitepackagespath not in sys.path:
-        sys.path.append(usersitepackagespath)
-    if os.path.exists(mda_path) and mda_path not in sys.path:
-        sys.path.append(mda_path)
 
 #A function to display custom messages to the user
 def show_message_box(message = "", title = "Message Box", icon = 'INFO'):
@@ -74,209 +76,6 @@ def show_message_box(message = "", title = "Message Box", icon = 'INFO'):
         self.layout.label(text=message)
     bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
 
-#Checks if the DICOM file is a RTDose file.
-def is_dose_file(ds):
-    """
-    Checks if the DICOM file at the given path is of type dose.
-    Returns True if it is, False otherwise.
-    """
-    try:
-        if ds.Modality == 'RTDOSE':
-            return True
-        else:
-            return False
-    except:
-        return False
-    
-#Checks if the DICOM file is a RTStructure file.
-def is_structure_file(ds):
-    """
-    Checks if the DICOM file at the given path is of type structure.
-    Returns True if it is, False otherwise.
-    """
-    try:
-        if ds.Modality == 'RTSTRUCT':
-            return True
-        else:
-            return False
-    except:
-        return False
-
-#Checks if the required dependancies are installed
-def check_dependencies():
-    def is_module_installed(module_name):
-        try:
-            __import__(module_name)
-            return True
-        except ImportError:
-            return False
-    current_path = bpy.path.abspath(os.path.dirname(__file__))
-    with open(current_path+'/requirements.txt') as f:
-        for line in f:
-            module_name = line.strip().split('==')[0]  # Remove version if present
-            #print('Checking for module:', module_name)
-            if not is_module_installed(module_name):
-                print(f"Module '{module_name}' is not installed")
-
-                return False  # Return 0 as soon as a missing module is found
-
-    return True  # Return 1 if all modules are installed
-
-#a function to install the required python modules
-def install_python_modules():
-
-    import subprocess
-    import platform
-
-    def isWindows():
-        return os.name == 'nt'
-
-    def isMacOS():
-        return os.name == 'posix' and platform.system() == "Darwin"
-
-    def isLinux():
-        return os.name == 'posix' and platform.system() == "Linux"
-
-    def python_exec():
-        import sys
-        if isWindows():
-            return os.path.join(sys.prefix, 'bin', 'python.exe')
-        elif isMacOS():
-            try:
-                # 2.92 and older
-                path = bpy.app.binary_path_python
-            except AttributeError:
-                # 2.93 and later
-                import sys
-                path = sys.executable
-            return os.path.abspath(path)
-        elif isLinux():
-            return os.path.join(sys.prefix, 'sys.prefix/bin', 'python')
-        else:
-            print("sorry, still not implemented for ", os.name, " - ", platform.system)
-
-    def installModule(packageName):
-        try:
-            subprocess.call([python_exe, "import ", packageName])
-        except:
-            python_exe = python_exec()
-           # upgrade pip
-            subprocess.call([python_exe, "-m", "ensurepip"])
-            subprocess.call([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
-           # install required packages
-            subprocess.call([python_exe, "-m", "pip", "install", packageName])
-    current_path = bpy.path.abspath(os.path.dirname(__file__))
-    with open(current_path+'/requirements.txt') as f:
-        for line in f:
-            # Strip off any whitespace and ignore empty lines
-            module = line.strip()
-            if module:
-                installModule(module)
-    
-    #credit to luckychris https://github.com/luckychris
-    return 1  
-
-#A function to add custom data properties to the selected mesh
-#This code was adapted from https://github.com/simonbroggi/blender_spreadsheet_import
-def add_data_fields(mesh, data_fields):
-    # add custom data
-    for data_field in data_fields:
-        mesh.attributes.new(name=data_field if data_field else "empty_key_string", type='FLOAT', domain='POINT')
-
-def create_object(mesh, name):
-    # Create new object
-    for ob in bpy.context.selected_objects:
-        ob.select_set(False)
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-    return obj
-
-#Checks if the DICOM file is a CT or MRI image
-def check_dicom_image_type(ds):
-    """
-    Check if a DICOM file is a CT or MRI image
-    :param dicom_file_path: path to the DICOM file
-    :return: 'CT' if the file is a CT image, 'MRI' if the file is an MRI image, and 'Unknown' if the file is neither CT nor MRI
-    """
-    try:
-
-        if ds.Modality == 'CT':
-            return 1
-        elif ds.Modality == 'MR':
-            return 1
-        else:
-            return 0
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return 'Unknown'
-
-
-# Define a function to load DICOM images from a folder
-def load_dicom_images(folder):
-  # Create an empty list to store the images
-  images = []
-  # Loop through all files in the folder
-  for filename in os.listdir(folder):
-    # Check if the file is a DICOM file
-    if filename.endswith(".dcm"):
-      # Read the file using pydicom
-      image = pydicom.dcmread(os.path.join(folder, filename))
-      if check_dicom_image_type(image):
-          # Append the image to the list
-          images.append(image)
-  # Return the list of images
-  return images
-
-# Define a function to filter DICOM images by series UID
-def filter_by_series_uid(images, series_uid):
-  # Create an empty list to store the filtered images
-  filtered_images = []
-  # Loop through all images in the list
-  for image in images:
-    # Check if the image has the same series UID as specified
-    if image.SeriesInstanceUID == series_uid:
-      # Append the image to the filtered list
-      filtered_images.append(image)
-  # Return the filtered list of images
-  return filtered_images
-
-# Define a function to sort DICOM images by instance number
-def sort_by_instance_number(images):
-  # Sort the list of images by their instance number attribute using lambda function
-  sorted_images = sorted(images, key=lambda x: x.InstanceNumber)
-  # Return the sorted list of images
-  return sorted_images
-
-def extract_dicom_data(images):
-  dicom_3d_array = []
-  spacing = []
-  slice_position = []
-  slice_spacing = []
-  for i in range(0,len(images)):
-      #dicom_3d_array.append(np.transpose(np.flipud(images[i].pixel_array)))
-      dicom_3d_array.append(images[i].pixel_array)
-      spacing = images[i].PixelSpacing
-      slice_position.append(images[i].ImagePositionPatient)
-      slice_spacing = images[i].SliceThickness
-      image_origin = images[i].ImagePositionPatient
-      print(slice_spacing)
-  dicom_3d_array = np.asarray(dicom_3d_array)   
-  dicom_3d_array = np.flipud(dicom_3d_array)
-  return dicom_3d_array, spacing, slice_position, slice_spacing, image_origin
-
-def rescale_DICOM_image(array):
-    # Get the minimum and maximum values of the array
-    min_value = np.min(array)
-    max_value = np.max(array)
-
-    # Subtract the minimum and divide by the range
-    scaled_array = (array - min_value) / (max_value - min_value)
-
-    # Return the scaled array
-    return scaled_array
 
 
 addon_keymaps = {}
@@ -371,9 +170,9 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             volume_dim = np.shape(CT_volume)
             
             # Print out some information about your sorted slices
-            print(f"Number of slices: {len(sorted_images)}")
-            print(f"First slice instance number: {sorted_images[0].InstanceNumber}")
-            print(f"Last slice instance number: {sorted_images[-1].InstanceNumber}")
+            #print(f"Number of slices: {len(sorted_images)}")
+            #print(f"First slice instance number: {sorted_images[0].InstanceNumber}")
+            #print(f"Last slice instance number: {sorted_images[-1].InstanceNumber}")
             
             
             # Create an OpenVDB volume from the pixel data
