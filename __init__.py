@@ -68,7 +68,10 @@ def verify_user_sitepackages(mda_path):
     if os.path.exists(mda_path) and mda_path not in sys.path:
         sys.path.append(mda_path)
 
-
+def show_message_box(message = "", title = "Message Box", icon = 'INFO'):
+    def draw(self, context):
+        self.layout.label(text=message)
+    bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
     
 def is_dose_file(ds):
     """
@@ -347,7 +350,11 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             # Sort those filtered DICOM CT slices by their instance number using sort_by_instance_number function
             sorted_images = sort_by_instance_number(filtered_images)
             CT_volume, spacing, slice_position, slice_spacing, image_origin = extract_dicom_data(sorted_images)
-    
+            
+            #If spacing is invalid, set to slice spacing of 1 mm
+            if slice_spacing == 0:
+                slice_spacing = 1
+            
 
             #CT_volume= np.transpose(CT_volume, axes=(2,1,0))
             #CT_volume = rescale_DICOM_image(CT_volume)
@@ -654,8 +661,15 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         origin = DICOM_IMAGE.GetOrigin()
 
         dicom_structure = pydicom.dcmread(structure_path)
+        
+        try:
+            struct_masks, struct_names =  transform_point_set_from_dicom_struct(DICOM_IMAGE, dicom_structure)#, spacing_override=(5,5,5))
 
-        struct_masks, struct_names =  transform_point_set_from_dicom_struct(DICOM_IMAGE, dicom_structure)#, spacing_override=(5,5,5))
+        except:
+            print('Something is wrong with the structure file. Please check the file and try again.')
+            show_message_box("Something is wrong with the structure file. Please check the file and try again.", "Error", 'ERROR')
+            return {"CANCELLED"}
+    
         
         for i in range(0,len(struct_masks)):
             numpy_image = sitk.GetArrayFromImage(struct_masks[i])
