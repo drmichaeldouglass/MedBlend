@@ -27,7 +27,7 @@ bl_info = {
     "author" : "Michael Douglass", 
     "description" : "A Medical image visulisation tool for Blender",
     "blender" : (3, 5, 0),
-    "version" : (0, 0, 2),
+    "version" : (0, 0, 6),
     "location" : "Australia",
     "warning" : "",
     "doc_url": "https://github.com/drmichaeldouglass/MedBlend", 
@@ -68,11 +68,13 @@ def verify_user_sitepackages(mda_path):
     if os.path.exists(mda_path) and mda_path not in sys.path:
         sys.path.append(mda_path)
 
+#A function to display custom messages to the user
 def show_message_box(message = "", title = "Message Box", icon = 'INFO'):
     def draw(self, context):
         self.layout.label(text=message)
     bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
-    
+
+#Checks if the DICOM file is a RTDose file.
 def is_dose_file(ds):
     """
     Checks if the DICOM file at the given path is of type dose.
@@ -85,7 +87,8 @@ def is_dose_file(ds):
             return False
     except:
         return False
-
+    
+#Checks if the DICOM file is a RTStructure file.
 def is_structure_file(ds):
     """
     Checks if the DICOM file at the given path is of type structure.
@@ -99,6 +102,7 @@ def is_structure_file(ds):
     except:
         return False
 
+#Checks if the required dependancies are installed
 def check_dependencies():
     def is_module_installed(module_name):
         try:
@@ -118,6 +122,7 @@ def check_dependencies():
 
     return True  # Return 1 if all modules are installed
 
+#a function to install the required python modules
 def install_python_modules():
 
     import subprocess
@@ -170,7 +175,9 @@ def install_python_modules():
     
     #credit to luckychris https://github.com/luckychris
     return 1  
-#This code adapted from https://github.com/simonbroggi/blender_spreadsheet_import
+
+#A function to add custom data properties to the selected mesh
+#This code was adapted from https://github.com/simonbroggi/blender_spreadsheet_import
 def add_data_fields(mesh, data_fields):
     # add custom data
     for data_field in data_fields:
@@ -186,6 +193,7 @@ def create_object(mesh, name):
     obj.select_set(True)
     return obj
 
+#Checks if the DICOM file is a CT or MRI image
 def check_dicom_image_type(ds):
     """
     Check if a DICOM file is a CT or MRI image
@@ -243,7 +251,6 @@ def sort_by_instance_number(images):
   return sorted_images
 
 def extract_dicom_data(images):
-  
   dicom_3d_array = []
   spacing = []
   slice_position = []
@@ -293,6 +300,8 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        
+        #Only displays the load buttons if the required dependancies are installed
         if check_dependencies():
             layout.label(text='Images', icon_value=125)
             op = layout.operator('sna.load_ct_fc7b9', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
@@ -307,10 +316,9 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
             layout.label(text='Install Python Dependancies', icon_value=0)
             op = layout.operator('sna.install_python_dependancies', text='Install Dependancies', icon_value=0, emboss=True, depress=False)
 
-            #print("module 'pydicom' is not installed")
 
 
-
+#Class to load CT or MRI Images
 class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_ct_fc7b9"
     bl_label = "Load CT"
@@ -399,7 +407,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
         apply_image_shader()
         return {"FINISHED"}
 
-
+#Class to load Proton Plan files
 class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_proton_1dbc6"
     bl_label = "Load Proton"
@@ -523,7 +531,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
         #print(np.shape(weights))
         return {"FINISHED"}
 
-
+#Class to load DICOM Dose files
 class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_dose_7629f"
     bl_label = "Load Dose"
@@ -621,7 +629,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
         
         return {"FINISHED"}
 
-
+#Class to load DICOM Structure files as volumes
 class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_structures_5ebc9"
     bl_label = "Load Structures"
