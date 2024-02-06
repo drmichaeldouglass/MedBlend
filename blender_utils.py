@@ -1,8 +1,11 @@
 import bpy
 
-#A function to add custom data properties to the selected mesh
-#This code was adapted from https://github.com/simonbroggi/blender_spreadsheet_import
+
 def add_data_fields(mesh, data_fields):
+    """
+    #A function to add custom data properties to the selected mesh
+    This code was adapted from https://github.com/simonbroggi/blender_spreadsheet_import
+    """
     # add custom data
     for data_field in data_fields:
         mesh.attributes.new(name=data_field if data_field else "empty_key_string", type='FLOAT', domain='POINT')

@@ -4,7 +4,12 @@ import site
 import bpy
 
 def verify_user_sitepackages(mda_path):
+    """
+    Checks to see if the user site-packages directory is in the python path
+    
+    """
     usersitepackagespath = site.getusersitepackages()
+
 
     if os.path.exists(usersitepackagespath) and usersitepackagespath not in sys.path:
         sys.path.append(usersitepackagespath)
@@ -13,8 +18,11 @@ def verify_user_sitepackages(mda_path):
 
 
 
-#Checks if the required dependancies are installed
+
 def check_dependencies():
+    """
+    Checks if the required python modules are installed
+    """
     def is_module_installed(module_name):
         try:
             __import__(module_name)
@@ -35,6 +43,9 @@ def check_dependencies():
 
 #a function to install the required python modules
 def install_python_modules():
+    """
+    Installs the required python modules
+    """
 
     import subprocess
     import platform

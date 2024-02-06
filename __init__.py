@@ -26,8 +26,8 @@ bl_info = {
     "name" : "MedBlend",
     "author" : "Michael Douglass", 
     "description" : "A Medical image visulisation tool for Blender",
-    "blender" : (3, 5, 0),
-    "version" : (0, 0, 6),
+    "blender" : (4, 0, 2),
+    "version" : (1, 0, 0),
     "location" : "Australia",
     "warning" : "",
     "doc_url": "https://github.com/drmichaeldouglass/MedBlend", 
@@ -64,11 +64,6 @@ from .dicom_util import (
 from .node_groups import apply_dose_shader, apply_image_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
 from .blender_utils import add_data_fields, create_object
 from .install_modules import verify_user_sitepackages, install_python_modules, check_dependencies
-#try:
-#    import pydicom
-#except:
-#    print('Modules not installed')
-
 
 #A function to display custom messages to the user
 def show_message_box(message = "", title = "Message Box", icon = 'INFO'):

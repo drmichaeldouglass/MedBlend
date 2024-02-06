@@ -77,6 +77,12 @@ def load_dicom_images(folder):
     
 
 def rescale_DICOM_image(array):
+    """
+    Rescale the pixel values of a DICOM image to the range [0, 1]
+    :param array: 2D or 3D array of pixel values
+    :return: 2D or 3D array of rescaled pixel values
+    """
+
     # Get the minimum and maximum values of the array
     min_value = np.min(array)
     max_value = np.max(array)
@@ -90,13 +96,19 @@ def rescale_DICOM_image(array):
 
 # Define a function to sort DICOM images by instance number
 def sort_by_instance_number(images):
-    # Sort the list of images by their instance number attribute using lambda function
+    """
+    Sort the list of images by their instance number attribute using lambda function
+    :param images: list of DICOM images
+    :return: sorted list of DICOM images
+    """
+    # Sort the list of images by their instance number attribute
     sorted_images = sorted(images, key=lambda x: x.InstanceNumber)
     # Return the sorted list of images
     return sorted_images
 
 
 def extract_dicom_data(images):
+
     dicom_3d_array = []
     spacing = []
     slice_position = []
@@ -114,8 +126,14 @@ def extract_dicom_data(images):
     return dicom_3d_array, spacing, slice_position, slice_spacing, image_origin
 
 
-# Define a function to filter DICOM images by series UID
 def filter_by_series_uid(images, series_uid):
+    """
+    Filter a list of DICOM images by their series instance UID
+    :param images: list of DICOM images
+    :param series_uid: series instance UID to filter by
+    :return: filtered list of DICOM images
+    """
+    
     # Create an empty list to store the filtered images
     filtered_images = []
     # Loop through all images in the list

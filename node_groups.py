@@ -1,6 +1,10 @@
 import bpy
 
 def dose_material_shader():
+    """
+    Constructs the volume shader for the dose volume
+    
+    """
     mat = bpy.data.materials.new(name = "Dose Material")
     mat.use_nodes = True
     dose_material = mat.node_tree
@@ -115,6 +119,10 @@ def apply_dose_shader():
 
         
 def image_material_shader():
+    """
+    Constructs the volume shader for the CT and MRI images
+    
+    """
 
     mat = bpy.data.materials.new(name = "Image Material")
     mat.use_nodes = True
@@ -332,6 +340,10 @@ def add_CT_to_volume_geo_nodes():
 
 
 def proton_spots_node_group():
+     """
+     Creates the geometry node group for the proton spots. Loads spot weights and spot postions and assembles the geometry for the proton spots.
+     
+     """
 	proton_spots = bpy.data.node_groups.new(type = 'GeometryNodeTree', name = "Proton_Spots")
 
 	proton_spots.is_modifier = True
@@ -626,6 +638,10 @@ def proton_spots_node_group():
 
 
 def add_proton_geo_nodes():
+    """
+    Adds the proton spots node group to the selected object
+    """
+
     proton_spots = proton_spots_node_group()    
     name = bpy.context.object.name
     obj = bpy.data.objects[name]
