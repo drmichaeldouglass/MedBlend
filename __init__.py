@@ -26,8 +26,8 @@ bl_info = {
     "name" : "MedBlend",
     "author" : "Michael Douglass", 
     "description" : "A Medical image visulisation tool for Blender",
-    "blender" : (3, 5, 0),
-    "version" : (0, 0, 2),
+    "blender" : (4, 0, 2),
+    "version" : (1, 0, 0),
     "location" : "Australia",
     "warning" : "",
     "doc_url": "https://github.com/drmichaeldouglass/MedBlend", 
@@ -51,198 +51,26 @@ import site
 
 #Custom Packages
 from .proton import is_proton_plan
+from .dicom_util import (
+    check_dicom_image_type, 
+    is_structure_file, 
+    is_dose_file, 
+    load_dicom_images, 
+    rescale_DICOM_image, 
+    sort_by_instance_number, 
+    extract_dicom_data, 
+    filter_by_series_uid
+)
 from .node_groups import apply_dose_shader, apply_image_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
+from .blender_utils import add_data_fields, create_object
+from .install_modules import verify_user_sitepackages, install_python_modules, check_dependencies
 
-try:
-    import pydicom
-except:
-    print('pydicom not installed')
+#A function to display custom messages to the user
+def show_message_box(message = "", title = "Message Box", icon = 'INFO'):
+    def draw(self, context):
+        self.layout.label(text=message)
+    bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
 
-#from bpy.props import StringProperty, BoolProperty, EnumProperty
-
-def verify_user_sitepackages(mda_path):
-    usersitepackagespath = site.getusersitepackages()
-
-    if os.path.exists(usersitepackagespath) and usersitepackagespath not in sys.path:
-        sys.path.append(usersitepackagespath)
-    if os.path.exists(mda_path) and mda_path not in sys.path:
-        sys.path.append(mda_path)
-
-
-    
-def is_dose_file(ds):
-    """
-    Checks if the DICOM file at the given path is of type dose.
-    Returns True if it is, False otherwise.
-    """
-    try:
-        if ds.Modality == 'RTDOSE':
-            return True
-        else:
-            return False
-    except:
-        return False
-
-def is_structure_file(ds):
-    """
-    Checks if the DICOM file at the given path is of type structure.
-    Returns True if it is, False otherwise.
-    """
-    try:
-        if ds.Modality == 'RTSTRUCT':
-            return True
-        else:
-            return False
-    except:
-        return False
-
-def install_python_modules():
-
-    import subprocess
-    import platform
-
-    def isWindows():
-        return os.name == 'nt'
-
-    def isMacOS():
-        return os.name == 'posix' and platform.system() == "Darwin"
-
-    def isLinux():
-        return os.name == 'posix' and platform.system() == "Linux"
-
-    def python_exec():
-        import sys
-        if isWindows():
-            return os.path.join(sys.prefix, 'bin', 'python.exe')
-        elif isMacOS():
-            try:
-                # 2.92 and older
-                path = bpy.app.binary_path_python
-            except AttributeError:
-                # 2.93 and later
-                import sys
-                path = sys.executable
-            return os.path.abspath(path)
-        elif isLinux():
-            return os.path.join(sys.prefix, 'sys.prefix/bin', 'python')
-        else:
-            print("sorry, still not implemented for ", os.name, " - ", platform.system)
-
-    def installModule(packageName):
-        try:
-            subprocess.call([python_exe, "import ", packageName])
-        except:
-            python_exe = python_exec()
-           # upgrade pip
-            subprocess.call([python_exe, "-m", "ensurepip"])
-            subprocess.call([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
-           # install required packages
-            subprocess.call([python_exe, "-m", "pip", "install", packageName])
-    installModule('pydicom')
-    installModule('platipy')
-    
-    #credit to luckychris https://github.com/luckychris
-    return 1  
-#This code adapted from https://github.com/simonbroggi/blender_spreadsheet_import
-def add_data_fields(mesh, data_fields):
-    # add custom data
-    for data_field in data_fields:
-        mesh.attributes.new(name=data_field if data_field else "empty_key_string", type='FLOAT', domain='POINT')
-
-def create_object(mesh, name):
-    # Create new object
-    for ob in bpy.context.selected_objects:
-        ob.select_set(False)
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-    return obj
-
-def check_dicom_image_type(ds):
-    """
-    Check if a DICOM file is a CT or MRI image
-    :param dicom_file_path: path to the DICOM file
-    :return: 'CT' if the file is a CT image, 'MRI' if the file is an MRI image, and 'Unknown' if the file is neither CT nor MRI
-    """
-    try:
-
-        if ds.Modality == 'CT':
-            return 1
-        elif ds.Modality == 'MR':
-            return 1
-        else:
-            return 0
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return 'Unknown'
-
-
-# Define a function to load DICOM images from a folder
-def load_dicom_images(folder):
-  # Create an empty list to store the images
-  images = []
-  # Loop through all files in the folder
-  for filename in os.listdir(folder):
-    # Check if the file is a DICOM file
-    if filename.endswith(".dcm"):
-      # Read the file using pydicom
-      image = pydicom.dcmread(os.path.join(folder, filename))
-      if check_dicom_image_type(image):
-          # Append the image to the list
-          images.append(image)
-  # Return the list of images
-  return images
-
-# Define a function to filter DICOM images by series UID
-def filter_by_series_uid(images, series_uid):
-  # Create an empty list to store the filtered images
-  filtered_images = []
-  # Loop through all images in the list
-  for image in images:
-    # Check if the image has the same series UID as specified
-    if image.SeriesInstanceUID == series_uid:
-      # Append the image to the filtered list
-      filtered_images.append(image)
-  # Return the filtered list of images
-  return filtered_images
-
-# Define a function to sort DICOM images by instance number
-def sort_by_instance_number(images):
-  # Sort the list of images by their instance number attribute using lambda function
-  sorted_images = sorted(images, key=lambda x: x.InstanceNumber)
-  # Return the sorted list of images
-  return sorted_images
-
-def extract_dicom_data(images):
-  
-  dicom_3d_array = []
-  spacing = []
-  slice_position = []
-  slice_spacing = []
-  for i in range(0,len(images)):
-      #dicom_3d_array.append(np.transpose(np.flipud(images[i].pixel_array)))
-      dicom_3d_array.append(images[i].pixel_array)
-      spacing = images[i].PixelSpacing
-      slice_position.append(images[i].ImagePositionPatient)
-      slice_spacing = images[i].SliceThickness
-      image_origin = images[i].ImagePositionPatient
-      print(slice_spacing)
-  dicom_3d_array = np.asarray(dicom_3d_array)   
-  dicom_3d_array = np.flipud(dicom_3d_array)
-  return dicom_3d_array, spacing, slice_position, slice_spacing, image_origin
-
-def rescale_DICOM_image(array):
-    # Get the minimum and maximum values of the array
-    min_value = np.min(array)
-    max_value = np.max(array)
-
-    # Subtract the minimum and divide by the range
-    scaled_array = (array - min_value) / (max_value - min_value)
-
-    # Return the scaled array
-    return scaled_array
 
 
 addon_keymaps = {}
@@ -266,8 +94,9 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        try:
-            import pydicom
+        
+        #Only displays the load buttons if the required dependancies are installed
+        if check_dependencies():
             layout.label(text='Images', icon_value=125)
             op = layout.operator('sna.load_ct_fc7b9', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
             layout.label(text='Dose', icon_value=851)
@@ -277,14 +106,13 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
             layout.label(text='Proton Spots', icon_value=653)
             op = layout.operator('sna.load_proton_1dbc6', text='Load Proton Plan', icon_value=0, emboss=True, depress=False)
 
-        except ModuleNotFoundError:
+        else:
             layout.label(text='Install Python Dependancies', icon_value=0)
             op = layout.operator('sna.install_python_dependancies', text='Install Dependancies', icon_value=0, emboss=True, depress=False)
 
-            print("module 'pydicom' is not installed")
 
 
-
+#Class to load CT or MRI Images
 class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_ct_fc7b9"
     bl_label = "Load CT"
@@ -305,7 +133,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
         try:
             import pydicom
         except:
-            print('pydicom not installed')
+            print('Modules Not Installed')
 
         selected_file = pydicom.dcmread(file_name_CT)
         if check_dicom_image_type(selected_file):
@@ -324,7 +152,11 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             # Sort those filtered DICOM CT slices by their instance number using sort_by_instance_number function
             sorted_images = sort_by_instance_number(filtered_images)
             CT_volume, spacing, slice_position, slice_spacing, image_origin = extract_dicom_data(sorted_images)
-    
+            
+            #If spacing is invalid, set to slice spacing of 1 mm
+            if slice_spacing == 0:
+                slice_spacing = 1
+            
 
             #CT_volume= np.transpose(CT_volume, axes=(2,1,0))
             #CT_volume = rescale_DICOM_image(CT_volume)
@@ -333,9 +165,9 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             volume_dim = np.shape(CT_volume)
             
             # Print out some information about your sorted slices
-            print(f"Number of slices: {len(sorted_images)}")
-            print(f"First slice instance number: {sorted_images[0].InstanceNumber}")
-            print(f"Last slice instance number: {sorted_images[-1].InstanceNumber}")
+            #print(f"Number of slices: {len(sorted_images)}")
+            #print(f"First slice instance number: {sorted_images[0].InstanceNumber}")
+            #print(f"Last slice instance number: {sorted_images[-1].InstanceNumber}")
             
             
             # Create an OpenVDB volume from the pixel data
@@ -369,7 +201,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
         apply_image_shader()
         return {"FINISHED"}
 
-
+#Class to load Proton Plan files
 class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_proton_1dbc6"
     bl_label = "Load Proton"
@@ -389,7 +221,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
         try:
             import pydicom
         except:
-            print('pydicom not installed')
+            print('Modules not installed')
         
         import math
         pi_value = math.pi
@@ -493,7 +325,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
         #print(np.shape(weights))
         return {"FINISHED"}
 
-
+#Class to load DICOM Dose files
 class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_dose_7629f"
     bl_label = "Load Dose"
@@ -513,7 +345,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
         try:
             import pydicom
         except:
-            print('pydicom not installed')
+            print('Modules not installed')
         
         #Directory containing DICOM images
         DICOM_dir = file_name_dose
@@ -591,14 +423,13 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
         
         return {"FINISHED"}
 
-
+#Class to load DICOM Structure files as volumes
 class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
     bl_idname = "sna.load_structures_5ebc9"
     bl_label = "Load Structures"
     bl_description = "Load a DICOM Structure Set"
     bl_options = {"REGISTER", "UNDO"}
     filter_glob: bpy.props.StringProperty( default='*.dcm', options={'HIDDEN'} )
-
     @classmethod
     def poll(cls, context):
         if bpy.app.version >= (3, 0, 0) and True:
@@ -606,58 +437,79 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         return not False
 
     def execute(self, context):
-        file_name_struct = self.filepath
+        
+        from pathlib import Path
+        structure_path  = self.filepath
 
         try:
             import pydicom
+            import platipy
+            from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
+            from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
+            import SimpleITK as sitk
         except:
-            print('pydicom not installed')
+            print('Modules not installed')
 
-        dicom_data = pydicom.dcmread(file_name_struct) 
+        # Assume structure_file_path is the path to the structure file specified by the user
+        structure_file_path = Path(structure_path)
         
-        if is_structure_file(dicom_data):
+        # Get the directory of the structure file
+        structure_directory = structure_file_path.parent
+        directory_path = structure_directory
+        print(structure_path)
+        print(directory_path)
+        DICOM_IMAGE = read_dicom_image(directory_path)
+        voxel_resolution = DICOM_IMAGE.GetSpacing()
+        origin = DICOM_IMAGE.GetOrigin()
+
+        dicom_structure = pydicom.dcmread(structure_path)
         
+        try:
+            struct_masks, struct_names =  transform_point_set_from_dicom_struct(DICOM_IMAGE, dicom_structure)#, spacing_override=(5,5,5))
+
+        except:
+            print('Something is wrong with the structure file. Please check the file and try again.')
+            show_message_box("Something is wrong with the structure file. Please check the file and try again.", "Error", 'ERROR')
+            return {"CANCELLED"}
+    
         
-            # Extract the contour data from the structure file 
-            contours = [] 
-            structure_name = []
-            for i,structure in enumerate(dicom_data.ROIContourSequence): 
-                points = [] 
-                structure_name.append(dicom_data.StructureSetROISequence[i].ROIName)
-                for contour in structure.ContourSequence: 
+        for i in range(0,len(struct_masks)):
+            numpy_image = sitk.GetArrayFromImage(struct_masks[i])
+            
+            print('Structure Name:', struct_names[i])
+            print('Structure Shape:', np.shape(numpy_image))
+            print('Structure Voxel Resolution:', voxel_resolution)
+            print('Structure Origin:', origin)
+            
+    
+            #Creates a grid of Double precision
+            grid = openvdb.FloatGrid()
+            #Copies image volume from numpy to VDB grid
+            grid.copyFromArray(numpy_image.astype(float))
+    
+            #Scales the grid to slice thickness and pixel size using modified identity transformation matrix. NB. Blender is Z up coordinate system
+            grid.transform = openvdb.createLinearTransform([[voxel_resolution[2]/1000, 0, 0, 0], [0, voxel_resolution[0]/1000, 0, 0], [0,0,voxel_resolution[1]/1000,0], [0,0,0,1]])
+            #grid['center'] = (origin[0], origin[1], origin[2])
         
-                    
+            #Sets the grid class to FOG_VOLUME
+            grid.gridClass = openvdb.GridClass.FOG_VOLUME
+            #Blender needs grid name to be "Density"
+            grid.name='density'
         
-                    for i in range(0, len(contour.ContourData), 3): 
+            struct_dir = structure_directory.joinpath('structs.vdb')
+            struct_dir = structure_directory.joinpath(f'{struct_names[i]}.vdb')
+            #Writes CT volume to a vdb file but perhaps this could be done internally in the future
+            openvdb.write(str(struct_dir),grid)
         
-                        x = contour.ContourData[i+2]/1000
-        
-                        y = contour.ContourData[i+1]/1000
-        
-                        z = contour.ContourData[i]/1000
-        
-                        points.append((x, y, z)) 
-        
-                contours.append(points) 
-        
-        
-            # Convert the contours into mesh objects 
-            bpy.ops.object.select_all(action='DESELECT')  
-            for j,contour in enumerate(contours):  
-        
-                mesh = bpy.data.meshes.new(name="DICOM Structure") 
-        
-                mesh.from_pydata(contour, [], []) 
-        
-                object = bpy.data.objects.new(structure_name[j], mesh)
-                
-                
-                bpy.context.collection.objects.link(object)
-                bpy.data.objects[object.name].select_set(True)
-                bpy.context.view_layer.objects.active = object
-        
-        else:
-            print('No DICOM Structure Loaded')
+            # Add the volume to the scene
+            bpy.ops.object.volume_import(filepath=str(struct_dir), files=[])
+            #DICOM_object = easybpy.get_selected_object()
+            # Set the volume's origin to match the DICOM image position
+            #bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
+            dose_loaded = True
+            
+            
+            #print(struct_names[i])
 
         return {"FINISHED"}
     
