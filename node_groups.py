@@ -340,300 +340,299 @@ def add_CT_to_volume_geo_nodes():
 
 
 def proton_spots_node_group():
-     """
+    """
      Creates the geometry node group for the proton spots. Loads spot weights and spot postions and assembles the geometry for the proton spots.
      
-     """
-	proton_spots = bpy.data.node_groups.new(type = 'GeometryNodeTree', name = "Proton_Spots")
-
-	proton_spots.is_modifier = True
-	
-	#initialize proton_spots nodes
-	#proton_spots interface
-	#Socket Geometry
-	geometry_socket = proton_spots.interface.new_socket(name = "Geometry", in_out='OUTPUT', socket_type = 'NodeSocketGeometry')
-	geometry_socket.attribute_domain = 'POINT'
-	
-	#Socket Geometry
-	geometry_socket_1 = proton_spots.interface.new_socket(name = "Geometry", in_out='INPUT', socket_type = 'NodeSocketGeometry')
-	geometry_socket_1.attribute_domain = 'POINT'
-	
-	#Socket Effective Source Empty
-	effective_source_empty_socket = proton_spots.interface.new_socket(name = "Effective Source Empty", in_out='INPUT', socket_type = 'NodeSocketObject')
-	effective_source_empty_socket.attribute_domain = 'POINT'
-	effective_source_empty_socket.description = "Beam Source Empty"
-	
-	#Socket Point Size
-	point_size_socket = proton_spots.interface.new_socket(name = "Point Size", in_out='INPUT', socket_type = 'NodeSocketFloat')
-	point_size_socket.subtype = 'NONE'
-	point_size_socket.default_value = 0.0003000000142492354
-	point_size_socket.min_value = 0.0
-	point_size_socket.max_value = 10000.0
-	point_size_socket.attribute_domain = 'POINT'
-	
-	#Socket Beam Radius
-	beam_radius_socket = proton_spots.interface.new_socket(name = "Beam Radius", in_out='INPUT', socket_type = 'NodeSocketFloat')
-	beam_radius_socket.subtype = 'DISTANCE'
-	beam_radius_socket.default_value = 0.0010000000474974513
-	beam_radius_socket.min_value = 0.0
-	beam_radius_socket.max_value = 3.4028234663852886e+38
-	beam_radius_socket.attribute_domain = 'POINT'
-	
-	#Socket Spot Index
-	spot_index_socket = proton_spots.interface.new_socket(name = "Spot Index", in_out='INPUT', socket_type = 'NodeSocketInt')
-	spot_index_socket.subtype = 'NONE'
-	spot_index_socket.default_value = 0
-	spot_index_socket.min_value = -2147483648
-	spot_index_socket.max_value = 2147483647
-	spot_index_socket.attribute_domain = 'POINT'
-	
-	
-	#node Group Output
-	group_output = proton_spots.nodes.new("NodeGroupOutput")
-	group_output.name = "Group Output"
-	group_output.is_active_output = True
-	
-	#node Named Attribute
-	named_attribute = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-	named_attribute.name = "Named Attribute"
-	named_attribute.data_type = 'FLOAT'
-	#Name
-	named_attribute.inputs[0].default_value = "spot_x"
-	
-	#node Named Attribute.001
-	named_attribute_001 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-	named_attribute_001.name = "Named Attribute.001"
-	named_attribute_001.data_type = 'FLOAT'
-	#Name
-	named_attribute_001.inputs[0].default_value = "spot_y"
-	
-	#node Set Point Radius
-	set_point_radius = proton_spots.nodes.new("GeometryNodeSetPointRadius")
-	set_point_radius.name = "Set Point Radius"
-	#Selection
-	set_point_radius.inputs[1].default_value = True
-	
-	#node Named Attribute.002
-	named_attribute_002 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-	named_attribute_002.name = "Named Attribute.002"
-	named_attribute_002.data_type = 'FLOAT'
-	#Name
-	named_attribute_002.inputs[0].default_value = "spot_E"
-	
-	#node Named Attribute.003
-	named_attribute_003 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
-	named_attribute_003.name = "Named Attribute.003"
-	named_attribute_003.data_type = 'FLOAT'
-	#Name
-	named_attribute_003.inputs[0].default_value = "spot_weight"
-	
-	#node Set Position
-	set_position = proton_spots.nodes.new("GeometryNodeSetPosition")
-	set_position.name = "Set Position"
-	#Selection
-	set_position.inputs[1].default_value = True
-	#Offset
-	set_position.inputs[3].default_value = (0.0, 0.0, 0.0)
-	
-	#node Set Material
-	set_material = proton_spots.nodes.new("GeometryNodeSetMaterial")
-	set_material.name = "Set Material"
-	#Selection
-	set_material.inputs[1].default_value = True
-	if "Material" in bpy.data.materials:
-		set_material.inputs[2].default_value = bpy.data.materials["Material"]
-	
-	#node Join Geometry
-	join_geometry = proton_spots.nodes.new("GeometryNodeJoinGeometry")
-	join_geometry.name = "Join Geometry"
-	
-	#node Combine XYZ
-	combine_xyz = proton_spots.nodes.new("ShaderNodeCombineXYZ")
-	combine_xyz.name = "Combine XYZ"
-	
-	#node Curve Line
-	curve_line = proton_spots.nodes.new("GeometryNodeCurvePrimitiveLine")
-	curve_line.name = "Curve Line"
-	curve_line.mode = 'POINTS'
-	#Direction
-	curve_line.inputs[2].default_value = (0.0, 0.0, 1.0)
-	#Length
-	curve_line.inputs[3].default_value = 1.0
-	
-	#node Curve to Mesh
-	curve_to_mesh = proton_spots.nodes.new("GeometryNodeCurveToMesh")
-	curve_to_mesh.name = "Curve to Mesh"
-	#Fill Caps
-	curve_to_mesh.inputs[2].default_value = True
-	
-	#node Set Material.001
-	set_material_001 = proton_spots.nodes.new("GeometryNodeSetMaterial")
-	set_material_001.name = "Set Material.001"
-	#Selection
-	set_material_001.inputs[1].default_value = True
-	
-	#node Object Info
-	object_info = proton_spots.nodes.new("GeometryNodeObjectInfo")
-	object_info.name = "Object Info"
-	object_info.transform_space = 'RELATIVE'
-	#As Instance
-	object_info.inputs[1].default_value = False
-	
-	#node Group Input
-	group_input = proton_spots.nodes.new("NodeGroupInput")
-	group_input.name = "Group Input"
-	
-	#node Mesh to Points
-	mesh_to_points = proton_spots.nodes.new("GeometryNodeMeshToPoints")
-	mesh_to_points.name = "Mesh to Points"
-	mesh_to_points.mode = 'VERTICES'
-	#Selection
-	mesh_to_points.inputs[1].default_value = True
-	#Position
-	mesh_to_points.inputs[2].default_value = (0.0, 0.0, 0.0)
-	#Radius
-	mesh_to_points.inputs[3].default_value = 0.03999999910593033
-	
-	#node Math
-	math = proton_spots.nodes.new("ShaderNodeMath")
-	math.name = "Math"
-	math.operation = 'MULTIPLY'
-	math.use_clamp = False
-	#Value_002
-	math.inputs[2].default_value = 0.5
-	
-	#node Curve Circle
-	curve_circle = proton_spots.nodes.new("GeometryNodeCurvePrimitiveCircle")
-	curve_circle.name = "Curve Circle"
-	curve_circle.mode = 'RADIUS'
-	#Resolution
-	curve_circle.inputs[0].default_value = 32
-	#Point 1
-	curve_circle.inputs[1].default_value = (-1.0, 0.0, 0.0)
-	#Point 2
-	curve_circle.inputs[2].default_value = (0.0, 1.0, 0.0)
-	#Point 3
-	curve_circle.inputs[3].default_value = (1.0, 0.0, 0.0)
-	
-	#node Integer
-	integer = proton_spots.nodes.new("FunctionNodeInputInt")
-	integer.name = "Integer"
-	integer.integer = 0
-	
-	#node Sample Index
-	sample_index = proton_spots.nodes.new("GeometryNodeSampleIndex")
-	sample_index.name = "Sample Index"
-	sample_index.clamp = False
-	sample_index.data_type = 'FLOAT_VECTOR'
-	sample_index.domain = 'POINT'
-	#Value_Float
-	sample_index.inputs[1].default_value = 0.0
-	#Value_Int
-	sample_index.inputs[2].default_value = 0
-	#Value_Color
-	sample_index.inputs[4].default_value = (0.0, 0.0, 0.0, 0.0)
-	#Value_Bool
-	sample_index.inputs[5].default_value = False
-	#Value_Rotation
-	sample_index.inputs[6].default_value = (0.0, 0.0, 0.0)
-	
-	
-	
-	
-	#Set locations
-	group_output.location = (1480.2779541015625, 19.099044799804688)
-	named_attribute.location = (-426.120849609375, -87.12943267822266)
-	named_attribute_001.location = (-425.32879638671875, -225.96890258789062)
-	set_point_radius.location = (745.5230712890625, 31.70229148864746)
-	named_attribute_002.location = (-431.665283203125, -344.9742126464844)
-	named_attribute_003.location = (85.49007415771484, -248.5247802734375)
-	set_position.location = (281.5804138183594, 64.17086029052734)
-	set_material.location = (965.8740234375, 44.36990737915039)
-	join_geometry.location = (1260.62890625, 60.034934997558594)
-	combine_xyz.location = (-175.42483520507812, -83.68736267089844)
-	curve_line.location = (527.5903930664062, 500.82733154296875)
-	curve_to_mesh.location = (803.3193969726562, 381.9040222167969)
-	set_material_001.location = (1040.62890625, 260.43365478515625)
-	object_info.location = (154.10342407226562, 485.97100830078125)
-	group_input.location = (-646.9298706054688, 44.036460876464844)
-	mesh_to_points.location = (-342.452392578125, 334.5898132324219)
-	math.location = (525.8740844726562, -106.29212951660156)
-	curve_circle.location = (596.175048828125, 275.4619445800781)
-	integer.location = (-109.27851867675781, 394.7320251464844)
-	sample_index.location = (332.0760192871094, 386.84661865234375)
-	
-	#Set dimensions
-	group_output.width, group_output.height = 140.0, 100.0
-	named_attribute.width, named_attribute.height = 140.0, 100.0
-	named_attribute_001.width, named_attribute_001.height = 140.0, 100.0
-	set_point_radius.width, set_point_radius.height = 140.0, 100.0
-	named_attribute_002.width, named_attribute_002.height = 140.0, 100.0
-	named_attribute_003.width, named_attribute_003.height = 140.0, 100.0
-	set_position.width, set_position.height = 140.0, 100.0
-	set_material.width, set_material.height = 140.0, 100.0
-	join_geometry.width, join_geometry.height = 140.0, 100.0
-	combine_xyz.width, combine_xyz.height = 140.0, 100.0
-	curve_line.width, curve_line.height = 140.0, 100.0
-	curve_to_mesh.width, curve_to_mesh.height = 140.0, 100.0
-	set_material_001.width, set_material_001.height = 140.0, 100.0
-	object_info.width, object_info.height = 140.0, 100.0
-	group_input.width, group_input.height = 140.0, 100.0
-	mesh_to_points.width, mesh_to_points.height = 140.0, 100.0
-	math.width, math.height = 140.0, 100.0
-	curve_circle.width, curve_circle.height = 140.0, 100.0
-	integer.width, integer.height = 140.0, 100.0
-	sample_index.width, sample_index.height = 140.0, 100.0
-	
-	#initialize proton_spots links
-	#join_geometry.Geometry -> group_output.Geometry
-	proton_spots.links.new(join_geometry.outputs[0], group_output.inputs[0])
-	#mesh_to_points.Points -> set_position.Geometry
-	proton_spots.links.new(mesh_to_points.outputs[0], set_position.inputs[0])
-	#named_attribute.Attribute -> combine_xyz.X
-	proton_spots.links.new(named_attribute.outputs[1], combine_xyz.inputs[0])
-	#named_attribute_001.Attribute -> combine_xyz.Y
-	proton_spots.links.new(named_attribute_001.outputs[1], combine_xyz.inputs[1])
-	#named_attribute_002.Attribute -> combine_xyz.Z
-	proton_spots.links.new(named_attribute_002.outputs[1], combine_xyz.inputs[2])
-	#combine_xyz.Vector -> set_position.Position
-	proton_spots.links.new(combine_xyz.outputs[0], set_position.inputs[2])
-	#set_position.Geometry -> set_point_radius.Points
-	proton_spots.links.new(set_position.outputs[0], set_point_radius.inputs[0])
-	#group_input.Geometry -> mesh_to_points.Mesh
-	proton_spots.links.new(group_input.outputs[0], mesh_to_points.inputs[0])
-	#math.Value -> set_point_radius.Radius
-	proton_spots.links.new(math.outputs[0], set_point_radius.inputs[2])
-	#named_attribute_003.Attribute -> math.Value
-	proton_spots.links.new(named_attribute_003.outputs[1], math.inputs[0])
-	#set_point_radius.Points -> set_material.Geometry
-	proton_spots.links.new(set_point_radius.outputs[0], set_material.inputs[0])
-	#object_info.Location -> curve_line.Start
-	proton_spots.links.new(object_info.outputs[0], curve_line.inputs[0])
-	#set_material.Geometry -> join_geometry.Geometry
-	proton_spots.links.new(set_material.outputs[0], join_geometry.inputs[0])
-	#combine_xyz.Vector -> sample_index.Value
-	proton_spots.links.new(combine_xyz.outputs[0], sample_index.inputs[3])
-	#group_input.Geometry -> sample_index.Geometry
-	proton_spots.links.new(group_input.outputs[0], sample_index.inputs[0])
-	#sample_index.Value -> curve_line.End
-	proton_spots.links.new(sample_index.outputs[2], curve_line.inputs[1])
-	#set_material_001.Geometry -> join_geometry.Geometry
-	proton_spots.links.new(set_material_001.outputs[0], join_geometry.inputs[0])
-	#curve_line.Curve -> curve_to_mesh.Curve
-	proton_spots.links.new(curve_line.outputs[0], curve_to_mesh.inputs[0])
-	#curve_circle.Curve -> curve_to_mesh.Profile Curve
-	proton_spots.links.new(curve_circle.outputs[0], curve_to_mesh.inputs[1])
-	#curve_to_mesh.Mesh -> set_material_001.Geometry
-	proton_spots.links.new(curve_to_mesh.outputs[0], set_material_001.inputs[0])
-	#group_input.Effective Source Empty -> object_info.Object
-	proton_spots.links.new(group_input.outputs[1], object_info.inputs[0])
-	#group_input.Point Size -> math.Value
-	proton_spots.links.new(group_input.outputs[2], math.inputs[1])
-	#group_input.Beam Radius -> curve_circle.Radius
-	proton_spots.links.new(group_input.outputs[3], curve_circle.inputs[4])
-	#group_input.Spot Index -> sample_index.Index
-	proton_spots.links.new(group_input.outputs[4], sample_index.inputs[7])
-	return proton_spots
+    """
+    proton_spots = bpy.data.node_groups.new(type = 'GeometryNodeTree', name = "Proton_Spots")    
+    proton_spots.is_modifier = True
+    
+    #initialize proton_spots nodes
+    #proton_spots interface
+    #Socket Geometry
+    geometry_socket = proton_spots.interface.new_socket(name = "Geometry", in_out='OUTPUT', socket_type = 'NodeSocketGeometry')
+    geometry_socket.attribute_domain = 'POINT'
+    
+    #Socket Geometry
+    geometry_socket_1 = proton_spots.interface.new_socket(name = "Geometry", in_out='INPUT', socket_type = 'NodeSocketGeometry')
+    geometry_socket_1.attribute_domain = 'POINT'
+    
+    #Socket Effective Source Empty
+    effective_source_empty_socket = proton_spots.interface.new_socket(name = "Effective Source Empty", in_out='INPUT', socket_type = 'NodeSocketObject')
+    effective_source_empty_socket.attribute_domain = 'POINT'
+    effective_source_empty_socket.description = "Beam Source Empty"
+    
+    #Socket Point Size
+    point_size_socket = proton_spots.interface.new_socket(name = "Point Size", in_out='INPUT', socket_type = 'NodeSocketFloat')
+    point_size_socket.subtype = 'NONE'
+    point_size_socket.default_value = 0.0003000000142492354
+    point_size_socket.min_value = 0.0
+    point_size_socket.max_value = 10000.0
+    point_size_socket.attribute_domain = 'POINT'
+    
+    #Socket Beam Radius
+    beam_radius_socket = proton_spots.interface.new_socket(name = "Beam Radius", in_out='INPUT', socket_type = 'NodeSocketFloat')
+    beam_radius_socket.subtype = 'DISTANCE'
+    beam_radius_socket.default_value = 0.0010000000474974513
+    beam_radius_socket.min_value = 0.0
+    beam_radius_socket.max_value = 3.4028234663852886e+38
+    beam_radius_socket.attribute_domain = 'POINT'
+    
+    #Socket Spot Index
+    spot_index_socket = proton_spots.interface.new_socket(name = "Spot Index", in_out='INPUT', socket_type = 'NodeSocketInt')
+    spot_index_socket.subtype = 'NONE'
+    spot_index_socket.default_value = 0
+    spot_index_socket.min_value = -2147483648
+    spot_index_socket.max_value = 2147483647
+    spot_index_socket.attribute_domain = 'POINT'
+    
+    
+    #node Group Output
+    group_output = proton_spots.nodes.new("NodeGroupOutput")
+    group_output.name = "Group Output"
+    group_output.is_active_output = True
+    
+    #node Named Attribute
+    named_attribute = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute.name = "Named Attribute"
+    named_attribute.data_type = 'FLOAT'
+    #Name
+    named_attribute.inputs[0].default_value = "spot_x"
+    
+    #node Named Attribute.001
+    named_attribute_001 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute_001.name = "Named Attribute.001"
+    named_attribute_001.data_type = 'FLOAT'
+    #Name
+    named_attribute_001.inputs[0].default_value = "spot_y"
+    
+    #node Set Point Radius
+    set_point_radius = proton_spots.nodes.new("GeometryNodeSetPointRadius")
+    set_point_radius.name = "Set Point Radius"
+    #Selection
+    set_point_radius.inputs[1].default_value = True
+    
+    #node Named Attribute.002
+    named_attribute_002 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute_002.name = "Named Attribute.002"
+    named_attribute_002.data_type = 'FLOAT'
+    #Name
+    named_attribute_002.inputs[0].default_value = "spot_E"
+    
+    #node Named Attribute.003
+    named_attribute_003 = proton_spots.nodes.new("GeometryNodeInputNamedAttribute")
+    named_attribute_003.name = "Named Attribute.003"
+    named_attribute_003.data_type = 'FLOAT'
+    #Name
+    named_attribute_003.inputs[0].default_value = "spot_weight"
+    
+    #node Set Position
+    set_position = proton_spots.nodes.new("GeometryNodeSetPosition")
+    set_position.name = "Set Position"
+    #Selection
+    set_position.inputs[1].default_value = True
+    #Offset
+    set_position.inputs[3].default_value = (0.0, 0.0, 0.0)
+    
+    #node Set Material
+    set_material = proton_spots.nodes.new("GeometryNodeSetMaterial")
+    set_material.name = "Set Material"
+    #Selection
+    set_material.inputs[1].default_value = True
+    if "Material" in bpy.data.materials:
+        set_material.inputs[2].default_value = bpy.data.materials["Material"]
+    
+    #node Join Geometry
+    join_geometry = proton_spots.nodes.new("GeometryNodeJoinGeometry")
+    join_geometry.name = "Join Geometry"
+    
+    #node Combine XYZ
+    combine_xyz = proton_spots.nodes.new("ShaderNodeCombineXYZ")
+    combine_xyz.name = "Combine XYZ"
+    
+    #node Curve Line
+    curve_line = proton_spots.nodes.new("GeometryNodeCurvePrimitiveLine")
+    curve_line.name = "Curve Line"
+    curve_line.mode = 'POINTS'
+    #Direction
+    curve_line.inputs[2].default_value = (0.0, 0.0, 1.0)
+    #Length
+    curve_line.inputs[3].default_value = 1.0
+    
+    #node Curve to Mesh
+    curve_to_mesh = proton_spots.nodes.new("GeometryNodeCurveToMesh")
+    curve_to_mesh.name = "Curve to Mesh"
+    #Fill Caps
+    curve_to_mesh.inputs[2].default_value = True
+    
+    #node Set Material.001
+    set_material_001 = proton_spots.nodes.new("GeometryNodeSetMaterial")
+    set_material_001.name = "Set Material.001"
+    #Selection
+    set_material_001.inputs[1].default_value = True
+    
+    #node Object Info
+    object_info = proton_spots.nodes.new("GeometryNodeObjectInfo")
+    object_info.name = "Object Info"
+    object_info.transform_space = 'RELATIVE'
+    #As Instance
+    object_info.inputs[1].default_value = False
+    
+    #node Group Input
+    group_input = proton_spots.nodes.new("NodeGroupInput")
+    group_input.name = "Group Input"
+    
+    #node Mesh to Points
+    mesh_to_points = proton_spots.nodes.new("GeometryNodeMeshToPoints")
+    mesh_to_points.name = "Mesh to Points"
+    mesh_to_points.mode = 'VERTICES'
+    #Selection
+    mesh_to_points.inputs[1].default_value = True
+    #Position
+    mesh_to_points.inputs[2].default_value = (0.0, 0.0, 0.0)
+    #Radius
+    mesh_to_points.inputs[3].default_value = 0.03999999910593033
+    
+    #node Math
+    math = proton_spots.nodes.new("ShaderNodeMath")
+    math.name = "Math"
+    math.operation = 'MULTIPLY'
+    math.use_clamp = False
+    #Value_002
+    math.inputs[2].default_value = 0.5
+    
+    #node Curve Circle
+    curve_circle = proton_spots.nodes.new("GeometryNodeCurvePrimitiveCircle")
+    curve_circle.name = "Curve Circle"
+    curve_circle.mode = 'RADIUS'
+    #Resolution
+    curve_circle.inputs[0].default_value = 32
+    #Point 1
+    curve_circle.inputs[1].default_value = (-1.0, 0.0, 0.0)
+    #Point 2
+    curve_circle.inputs[2].default_value = (0.0, 1.0, 0.0)
+    #Point 3
+    curve_circle.inputs[3].default_value = (1.0, 0.0, 0.0)
+    
+    #node Integer
+    integer = proton_spots.nodes.new("FunctionNodeInputInt")
+    integer.name = "Integer"
+    integer.integer = 0
+    
+    #node Sample Index
+    sample_index = proton_spots.nodes.new("GeometryNodeSampleIndex")
+    sample_index.name = "Sample Index"
+    sample_index.clamp = False
+    sample_index.data_type = 'FLOAT_VECTOR'
+    sample_index.domain = 'POINT'
+    #Value_Float
+    sample_index.inputs[1].default_value = 0.0
+    #Value_Int
+    sample_index.inputs[2].default_value = 0
+    #Value_Color
+    sample_index.inputs[4].default_value = (0.0, 0.0, 0.0, 0.0)
+    #Value_Bool
+    sample_index.inputs[5].default_value = False
+    #Value_Rotation
+    sample_index.inputs[6].default_value = (0.0, 0.0, 0.0)
+    
+    
+    
+    
+    #Set locations
+    group_output.location = (1480.2779541015625, 19.099044799804688)
+    named_attribute.location = (-426.120849609375, -87.12943267822266)
+    named_attribute_001.location = (-425.32879638671875, -225.96890258789062)
+    set_point_radius.location = (745.5230712890625, 31.70229148864746)
+    named_attribute_002.location = (-431.665283203125, -344.9742126464844)
+    named_attribute_003.location = (85.49007415771484, -248.5247802734375)
+    set_position.location = (281.5804138183594, 64.17086029052734)
+    set_material.location = (965.8740234375, 44.36990737915039)
+    join_geometry.location = (1260.62890625, 60.034934997558594)
+    combine_xyz.location = (-175.42483520507812, -83.68736267089844)
+    curve_line.location = (527.5903930664062, 500.82733154296875)
+    curve_to_mesh.location = (803.3193969726562, 381.9040222167969)
+    set_material_001.location = (1040.62890625, 260.43365478515625)
+    object_info.location = (154.10342407226562, 485.97100830078125)
+    group_input.location = (-646.9298706054688, 44.036460876464844)
+    mesh_to_points.location = (-342.452392578125, 334.5898132324219)
+    math.location = (525.8740844726562, -106.29212951660156)
+    curve_circle.location = (596.175048828125, 275.4619445800781)
+    integer.location = (-109.27851867675781, 394.7320251464844)
+    sample_index.location = (332.0760192871094, 386.84661865234375)
+    
+    #Set dimensions
+    group_output.width, group_output.height = 140.0, 100.0
+    named_attribute.width, named_attribute.height = 140.0, 100.0
+    named_attribute_001.width, named_attribute_001.height = 140.0, 100.0
+    set_point_radius.width, set_point_radius.height = 140.0, 100.0
+    named_attribute_002.width, named_attribute_002.height = 140.0, 100.0
+    named_attribute_003.width, named_attribute_003.height = 140.0, 100.0
+    set_position.width, set_position.height = 140.0, 100.0
+    set_material.width, set_material.height = 140.0, 100.0
+    join_geometry.width, join_geometry.height = 140.0, 100.0
+    combine_xyz.width, combine_xyz.height = 140.0, 100.0
+    curve_line.width, curve_line.height = 140.0, 100.0
+    curve_to_mesh.width, curve_to_mesh.height = 140.0, 100.0
+    set_material_001.width, set_material_001.height = 140.0, 100.0
+    object_info.width, object_info.height = 140.0, 100.0
+    group_input.width, group_input.height = 140.0, 100.0
+    mesh_to_points.width, mesh_to_points.height = 140.0, 100.0
+    math.width, math.height = 140.0, 100.0
+    curve_circle.width, curve_circle.height = 140.0, 100.0
+    integer.width, integer.height = 140.0, 100.0
+    sample_index.width, sample_index.height = 140.0, 100.0
+    
+    #initialize proton_spots links
+    #join_geometry.Geometry -> group_output.Geometry
+    proton_spots.links.new(join_geometry.outputs[0], group_output.inputs[0])
+    #mesh_to_points.Points -> set_position.Geometry
+    proton_spots.links.new(mesh_to_points.outputs[0], set_position.inputs[0])
+    #named_attribute.Attribute -> combine_xyz.X
+    proton_spots.links.new(named_attribute.outputs[1], combine_xyz.inputs[0])
+    #named_attribute_001.Attribute -> combine_xyz.Y
+    proton_spots.links.new(named_attribute_001.outputs[1], combine_xyz.inputs[1])
+    #named_attribute_002.Attribute -> combine_xyz.Z
+    proton_spots.links.new(named_attribute_002.outputs[1], combine_xyz.inputs[2])
+    #combine_xyz.Vector -> set_position.Position
+    proton_spots.links.new(combine_xyz.outputs[0], set_position.inputs[2])
+    #set_position.Geometry -> set_point_radius.Points
+    proton_spots.links.new(set_position.outputs[0], set_point_radius.inputs[0])
+    #group_input.Geometry -> mesh_to_points.Mesh
+    proton_spots.links.new(group_input.outputs[0], mesh_to_points.inputs[0])
+    #math.Value -> set_point_radius.Radius
+    proton_spots.links.new(math.outputs[0], set_point_radius.inputs[2])
+    #named_attribute_003.Attribute -> math.Value
+    proton_spots.links.new(named_attribute_003.outputs[1], math.inputs[0])
+    #set_point_radius.Points -> set_material.Geometry
+    proton_spots.links.new(set_point_radius.outputs[0], set_material.inputs[0])
+    #object_info.Location -> curve_line.Start
+    proton_spots.links.new(object_info.outputs[0], curve_line.inputs[0])
+    #set_material.Geometry -> join_geometry.Geometry
+    proton_spots.links.new(set_material.outputs[0], join_geometry.inputs[0])
+    #combine_xyz.Vector -> sample_index.Value
+    proton_spots.links.new(combine_xyz.outputs[0], sample_index.inputs[3])
+    #group_input.Geometry -> sample_index.Geometry
+    proton_spots.links.new(group_input.outputs[0], sample_index.inputs[0])
+    #sample_index.Value -> curve_line.End
+    proton_spots.links.new(sample_index.outputs[2], curve_line.inputs[1])
+    #set_material_001.Geometry -> join_geometry.Geometry
+    proton_spots.links.new(set_material_001.outputs[0], join_geometry.inputs[0])
+    #curve_line.Curve -> curve_to_mesh.Curve
+    proton_spots.links.new(curve_line.outputs[0], curve_to_mesh.inputs[0])
+    #curve_circle.Curve -> curve_to_mesh.Profile Curve
+    proton_spots.links.new(curve_circle.outputs[0], curve_to_mesh.inputs[1])
+    #curve_to_mesh.Mesh -> set_material_001.Geometry
+    proton_spots.links.new(curve_to_mesh.outputs[0], set_material_001.inputs[0])
+    #group_input.Effective Source Empty -> object_info.Object
+    proton_spots.links.new(group_input.outputs[1], object_info.inputs[0])
+    #group_input.Point Size -> math.Value
+    proton_spots.links.new(group_input.outputs[2], math.inputs[1])
+    #group_input.Beam Radius -> curve_circle.Radius
+    proton_spots.links.new(group_input.outputs[3], curve_circle.inputs[4])
+    #group_input.Spot Index -> sample_index.Index
+    proton_spots.links.new(group_input.outputs[4], sample_index.inputs[7])
+    return proton_spots
 
 
 
