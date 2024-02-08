@@ -167,6 +167,7 @@ Visulise brachytherapy dwell point positions and dwell times
 
 MedBlend: A Medical Visualisation Add-On for Blender, M.Douglass
 https://github.com/drmichaeldouglass/MedBlend
+
 DOI: 10.5281/zenodo.10633327
 
 ## References
