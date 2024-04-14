@@ -526,26 +526,26 @@ def proton_spots_node_group():
 	integer.location = (-203.84304809570312, 297.8919677734375)
 	
 	#Set dimensions
-	group_output.width, group_output.height = 140.0, 100.0
-	named_attribute.width, named_attribute.height = 140.0, 100.0
-	named_attribute_001.width, named_attribute_001.height = 140.0, 100.0
-	set_point_radius.width, set_point_radius.height = 140.0, 100.0
-	named_attribute_002.width, named_attribute_002.height = 140.0, 100.0
-	named_attribute_003.width, named_attribute_003.height = 140.0, 100.0
-	math.width, math.height = 140.0, 100.0
-	set_position.width, set_position.height = 140.0, 100.0
-	set_material.width, set_material.height = 140.0, 100.0
-	join_geometry.width, join_geometry.height = 140.0, 100.0
-	combine_xyz.width, combine_xyz.height = 140.0, 100.0
-	group_input.width, group_input.height = 140.0, 100.0
-	mesh_to_points.width, mesh_to_points.height = 140.0, 100.0
-	sample_index.width, sample_index.height = 140.0, 100.0
-	object_info.width, object_info.height = 140.0, 100.0
-	curve_line.width, curve_line.height = 140.0, 100.0
-	curve_circle.width, curve_circle.height = 140.0, 100.0
-	curve_to_mesh.width, curve_to_mesh.height = 140.0, 100.0
-	set_material_001.width, set_material_001.height = 140.0, 100.0
-	integer.width, integer.height = 140.0, 100.0
+	# group_output.width, group_output.height = 140.0, 100.0
+	# named_attribute.width, named_attribute.height = 140.0, 100.0
+	# named_attribute_001.width, named_attribute_001.height = 140.0, 100.0
+	# set_point_radius.width, set_point_radius.height = 140.0, 100.0
+	# named_attribute_002.width, named_attribute_002.height = 140.0, 100.0
+	# named_attribute_003.width, named_attribute_003.height = 140.0, 100.0
+	# math.width, math.height = 140.0, 100.0
+	# set_position.width, set_position.height = 140.0, 100.0
+	# set_material.width, set_material.height = 140.0, 100.0
+	# join_geometry.width, join_geometry.height = 140.0, 100.0
+	# combine_xyz.width, combine_xyz.height = 140.0, 100.0
+	# group_input.width, group_input.height = 140.0, 100.0
+	# mesh_to_points.width, mesh_to_points.height = 140.0, 100.0
+	# sample_index.width, sample_index.height = 140.0, 100.0
+	# object_info.width, object_info.height = 140.0, 100.0
+	# curve_line.width, curve_line.height = 140.0, 100.0
+	# curve_circle.width, curve_circle.height = 140.0, 100.0
+	# curve_to_mesh.width, curve_to_mesh.height = 140.0, 100.0
+	# set_material_001.width, set_material_001.height = 140.0, 100.0
+	# integer.width, integer.height = 140.0, 100.0
 	
 	#initialize proton_spots links
 	#join_geometry.Geometry -> group_output.Geometry
