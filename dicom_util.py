@@ -61,6 +61,8 @@ def load_dicom_images(folder):
     :param folder: path to the folder containing the DICOM images
     :return: list of DICOM images
     """
+    import pydicom
+    print('imported pydicom')
     # Create an empty list to store the images
     images = []
     # Loop through all files in the folder
