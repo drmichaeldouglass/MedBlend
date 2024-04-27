@@ -1,8 +1,18 @@
 # dicom_utilities.py
 
 import os
-import pydicom
+
 import numpy as np
+
+try:
+
+    import pydicom
+
+except ImportError:
+    
+        print("pydicom is not installed. Please install it using the command 'pip install pydicom'")
+    
+        pydicom = None
 
     
 #Checks if the DICOM file is a RTDose file.
@@ -122,10 +132,12 @@ def extract_dicom_data(images):
         slice_position.append(images[i].ImagePositionPatient)
         slice_spacing = images[i].SliceThickness
         image_origin = images[i].ImagePositionPatient
+        image_orientation = images[i].ImageOrientationPatient
+        image_columns = images[i].Columns
         print(slice_spacing)
     dicom_3d_array = np.asarray(dicom_3d_array)   
     dicom_3d_array = np.flipud(dicom_3d_array)
-    return dicom_3d_array, spacing, slice_position, slice_spacing, image_origin
+    return dicom_3d_array, images[0].PixelSpacing, slice_position, images[0].SliceThickness, images[0].ImagePositionPatient, images[0].ImageOrientationPatient, images[0].Columns
 
 
 def filter_by_series_uid(images, series_uid):

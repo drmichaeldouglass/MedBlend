@@ -151,7 +151,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             # Sort those filtered DICOM CT slices by their instance number using sort_by_instance_number function
             sorted_images = sort_by_instance_number(filtered_images)
-            CT_volume, spacing, slice_position, slice_spacing, image_origin = extract_dicom_data(sorted_images)
+            CT_volume, spacing, slice_position, slice_spacing, image_origin, image_orientation, image_columns = extract_dicom_data(sorted_images)
             
             #If spacing is invalid, set to slice spacing of 1 mm
             if slice_spacing == 0:
@@ -164,6 +164,10 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             origin = np.asarray(origin)
             volume_dim = np.shape(CT_volume)
             
+            print('Origin:', origin)
+            print('Volume Dimensions:', volume_dim)
+            print('Spacing:', spacing)
+
             # Print out some information about your sorted slices
             #print(f"Number of slices: {len(sorted_images)}")
             #print(f"First slice instance number: {sorted_images[0].InstanceNumber}")
@@ -191,7 +195,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             
             # Add the volume to the scene
             bpy.ops.object.volume_import(filepath=str(dir_path.joinpath("CT.vdb")), files=[])
-            bpy.context.active_object.location = origin/1000
+            #bpy.context.active_object.location = origin/1000
             
 
             #DICOM_object = easybpy.get_selected_object()
