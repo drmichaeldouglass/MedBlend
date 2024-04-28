@@ -4,3 +4,11 @@ __pycache__/constants.cpython-310.pyc
 __pycache__/__init__.cpython-310.pyc
 __pycache__/node_groups.cpython-310.pyc
 test.py
+__pycache__/__init__.cpython-311.pyc
+__pycache__/blender_utils.cpython-311.pyc
+__pycache__/constants.cpython-311.pyc
+__pycache__/dicom_util.cpython-311.pyc
+__pycache__/install_modules.cpython-311.pyc
+__pycache__/node_groups.cpython-311.pyc
+__pycache__/proton.cpython-311.pyc
+assets/MedBlend_Assets.blend1

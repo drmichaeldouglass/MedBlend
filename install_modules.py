@@ -2,6 +2,8 @@ import sys
 import os
 import site
 import bpy
+import importlib
+
 
 def verify_user_sitepackages(mda_path):
     """
@@ -33,6 +35,10 @@ def check_dependencies():
     with open(current_path+'/requirements.txt') as f:
         for line in f:
             module_name = line.strip().split('==')[0]  # Remove version if present
+            
+            # Invalidate the import cache to ensure that the latest version of the module is imported
+            importlib.invalidate_caches()  # Invalidate the import cache
+
             #print('Checking for module:', module_name)
             if not is_module_installed(module_name):
                 print(f"Module '{module_name}' is not installed")

@@ -61,7 +61,7 @@ from .dicom_util import (
     extract_dicom_data, 
     filter_by_series_uid
 )
-from .node_groups import apply_dose_shader, apply_image_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
+from .node_groups import apply_DICOM_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
 from .blender_utils import add_data_fields, create_object
 from .install_modules import verify_user_sitepackages, install_python_modules, check_dependencies
 
@@ -163,15 +163,11 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             origin = [image_origin[2], image_origin[1], image_origin[0]]#[int(len(sorted_images)/2)]
             origin = np.asarray(origin)
             volume_dim = np.shape(CT_volume)
-            
+
+
             print('Origin:', origin)
             print('Volume Dimensions:', volume_dim)
             print('Spacing:', spacing)
-
-            # Print out some information about your sorted slices
-            #print(f"Number of slices: {len(sorted_images)}")
-            #print(f"First slice instance number: {sorted_images[0].InstanceNumber}")
-            #print(f"Last slice instance number: {sorted_images[-1].InstanceNumber}")
             
             
             # Create an OpenVDB volume from the pixel data
@@ -202,7 +198,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
             #images_loaded = True
         else:
            print('No DICOM images loaded')
-        apply_image_shader()
+        apply_DICOM_shader('Image Material')
         return {"FINISHED"}
 
 #Class to load Proton Plan files
@@ -390,10 +386,11 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
 
             #Converts list to numpy array
             dose_matrix = np.asarray(pixel_data)
+            dose_matrix = np.flipud(dose_matrix)
             
             #Normalises the image volume in range 0,1
             #dose_matrix = dose_matrix/np.max(dose_matrix)
-            dose_matrix = rescale_DICOM_image(dose_matrix)
+            #dose_matrix = rescale_DICOM_image(dose_matrix)
             #dose_matrix = dose_matrix.transpose(0, 2, 1)
             # Create an OpenVDB volume from the pixel data
             
@@ -419,11 +416,11 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
             bpy.ops.object.volume_import(filepath=str(dose_dir), files=[])
             #DICOM_object = easybpy.get_selected_object()
             # Set the volume's origin to match the DICOM image position
-            bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
+            #bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)
             dose_loaded = True
         else:
             print('No Dose File Loaded')
-        apply_dose_shader()
+        apply_DICOM_shader('Dose Material')
         
         return {"FINISHED"}
 
@@ -507,6 +504,7 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         
             # Add the volume to the scene
             bpy.ops.object.volume_import(filepath=str(struct_dir), files=[])
+            apply_DICOM_shader('Structure Material')
             #DICOM_object = easybpy.get_selected_object()
             # Set the volume's origin to match the DICOM image position
             #bpy.context.object.location = (origin[2]/1000,origin[1]/1000,origin[0]/1000)

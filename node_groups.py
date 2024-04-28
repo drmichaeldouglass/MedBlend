@@ -1,218 +1,37 @@
 import bpy
+import os
 
-def dose_material_shader():
-    """
-    Constructs the volume shader for the dose volume
-    
-    """
-    mat = bpy.data.materials.new(name = "Dose Material")
-    mat.use_nodes = True
-    dose_material = mat.node_tree
-	
-    #start with a clean node tree
-    for node in dose_material.nodes:
-        dose_material.nodes.remove(node)
-    #initialize dose_material nodes
-    #node Math
-    math = dose_material.nodes.new("ShaderNodeMath")
-    math.operation = 'MULTIPLY'
-    #Value_001
-    math.inputs[1].default_value = 2.0
-    #Value_002
-    math.inputs[2].default_value = 0.5
-    #node ColorRamp
-    colorramp = dose_material.nodes.new("ShaderNodeValToRGB")
-    colorramp.color_ramp.color_mode = 'RGB'
-    colorramp.color_ramp.hue_interpolation = 'NEAR'
-    colorramp.color_ramp.interpolation = 'LINEAR'
-    colorramp.color_ramp.elements.remove(colorramp.color_ramp.elements[0])
-    colorramp_cre_0 = colorramp.color_ramp.elements[0]
-    colorramp_cre_0.position = 0.0
-    colorramp_cre_0.alpha = 0.0
-    colorramp_cre_0.color = (0.0, 0.0, 0.0, 0.0)
-    colorramp_cre_1 = colorramp.color_ramp.elements.new(0.3227274417877197)
-    colorramp_cre_1.alpha = 0.5
-    colorramp_cre_1.color = (0.0, 0.029376786202192307, 1.0, 0.5)
-    colorramp_cre_2 = colorramp.color_ramp.elements.new(0.6818180680274963)
-    colorramp_cre_2.alpha = 1.0
-    colorramp_cre_2.color = (1.0, 0.7747962474822998, 0.0, 1.0)
-    colorramp_cre_3 = colorramp.color_ramp.elements.new(1.0)
-    colorramp_cre_3.alpha = 1.0
-    colorramp_cre_3.color = (1.0, 0.0041215610690414906, 0.0, 1.0)
-    #node Volume Info
-    volume_info = dose_material.nodes.new("ShaderNodeVolumeInfo")
-    #node ColorRamp.001
-    colorramp_001 = dose_material.nodes.new("ShaderNodeValToRGB")
-    colorramp_001.color_ramp.color_mode = 'RGB'
-    colorramp_001.color_ramp.hue_interpolation = 'NEAR'
-    colorramp_001.color_ramp.interpolation = 'LINEAR'
-    colorramp_001.color_ramp.elements.remove(colorramp_001.color_ramp.elements[0])
-    colorramp_001_cre_0 = colorramp_001.color_ramp.elements[0]
-    colorramp_001_cre_0.position = 0.0
-    colorramp_001_cre_0.alpha = 0.0
-    colorramp_001_cre_0.color = (0.0, 0.0, 0.0, 0.0)
-    colorramp_001_cre_1 = colorramp_001.color_ramp.elements.new(1.0)
-    colorramp_001_cre_1.alpha = 1.0
-    colorramp_001_cre_1.color = (1.0, 1.0, 1.0, 1.0)
-    #node Material Output
-    material_output = dose_material.nodes.new("ShaderNodeOutputMaterial")
-    material_output.target = 'ALL'
-    #Displacement
-    material_output.inputs[2].default_value = (0.0, 0.0, 0.0)
-    #Thickness
-    material_output.inputs[3].default_value = 0.0
-    #node Principled Volume
-    principled_volume = dose_material.nodes.new("ShaderNodeVolumePrincipled")
-    #Color
-    principled_volume.inputs[0].default_value = (0.5, 0.5, 0.5, 1.0)
-    #Color Attribute
-    principled_volume.inputs[1].default_value = ""
-    #Density
-    principled_volume.inputs[2].default_value = 0.0
-    #Density Attribute
-    principled_volume.inputs[3].default_value = "density"
-    #Anisotropy
-    principled_volume.inputs[4].default_value = 0.0
-    #Absorption Color
-    principled_volume.inputs[5].default_value = (0.0, 0.0, 0.0, 1.0)
-    #Blackbody Intensity
-    principled_volume.inputs[8].default_value = 0.0
-    #Blackbody Tint
-    principled_volume.inputs[9].default_value = (1.0, 1.0, 1.0, 1.0)
-    #Temperature
-    principled_volume.inputs[10].default_value = 1000.0
-    #Temperature Attribute
-    principled_volume.inputs[11].default_value = "temperature"
-    #Weight
-    principled_volume.inputs[12].default_value = 0.0
-    #Set locations
-    math.location = (-253.8451385498047, 547.6362915039062)
-    colorramp.location = (-583.43896484375, 330.26849365234375)
-    volume_info.location = (-822.9508056640625, 436.30157470703125)
-    colorramp_001.location = (-581.3194580078125, 565.661865234375)
-    material_output.location = (344.9896545410156, 601.4866943359375)
-    principled_volume.location = (-74.74122619628906, 568.8428344726562)
-    #Set dimensions
-    math.width, math.height = 140.0, 100.0
-    colorramp.width, colorramp.height = 240.0, 100.0
-    volume_info.width, volume_info.height = 140.0, 100.0
-    colorramp_001.width, colorramp_001.height = 240.0, 100.0
-    material_output.width, material_output.height = 140.0, 100.0
-    principled_volume.width, principled_volume.height = 240.0, 100.
-    #initialize dose_material links
-    #colorramp_001.Color -> math.Value
-    dose_material.links.new(colorramp_001.outputs[0], math.inputs[0])
-    #volume_info.Density -> colorramp.Fac
-    dose_material.links.new(volume_info.outputs[1], colorramp.inputs[0])
-    #volume_info.Density -> colorramp_001.Fac
-    dose_material.links.new(volume_info.outputs[1], colorramp_001.inputs[0])
-    #math.Value -> principled_volume.Emission Strength
-    dose_material.links.new(math.outputs[0], principled_volume.inputs[6])
-    #colorramp.Color -> principled_volume.Emission Color
-    dose_material.links.new(colorramp.outputs[0], principled_volume.inputs[7])
-    #principled_volume.Volume -> material_output.Volume
-    dose_material.links.new(principled_volume.outputs[0], material_output.inputs[1])
 
-def apply_dose_shader():
-    return dose_material_shader()
+def append_item_from_blend(file_path, item_type, item_name):
+    """
+    Append an item from a .blend file
+    """
+    bpy.ops.wm.append(
+        directory=file_path + "\\" + item_type + "\\",
+        filename=item_name
+    )
+
+def apply_DICOM_shader(shader_name):
+    current_path = bpy.path.abspath(os.path.dirname(__file__))
+
+    #combine current path with the immediate sub-folder called "assets"
+    path = os.path.join(current_path, "assets")
+    #sets assets file name to MedBlend_Assets.blend
+    assets_file = os.path.join(path, "MedBlend_Assets.blend")
+
+    #checks if there exists a material in the current scene called "Image Material"
+    if not shader_name in bpy.data.materials:
+        append_item_from_blend(assets_file, "Material", shader_name)
+        #Attach the image material shader to thhe currently selected object
+        bpy.context.object.data.materials.append(bpy.data.materials[shader_name])
+    else:
+        bpy.context.object.data.materials.append(bpy.data.materials[shader_name])
+
 
 
         
-def image_material_shader():
-    """
-    Constructs the volume shader for the CT and MRI images
-    
-    """
 
-    mat = bpy.data.materials.new(name = "Image Material")
-    mat.use_nodes = True
-	#initialize image_material node group
-
-    image_material = mat.node_tree
-    #start with a clean node tree
-    for node in image_material.nodes:
-        image_material.nodes.remove(node)
-    #initialize image_material nodes
-    #node Material Output
-    material_output = image_material.nodes.new("ShaderNodeOutputMaterial")
-    material_output.target = 'ALL'
-    #Displacement
-    material_output.inputs[2].default_value = (0.0, 0.0, 0.0)
-    #Thickness
-    material_output.inputs[3].default_value = 0.0    
-    #node Math
-    math = image_material.nodes.new("ShaderNodeMath")
-    math.operation = 'MULTIPLY'
-    #Value_001
-    math.inputs[1].default_value = 5.0
-    #Value_002
-    math.inputs[2].default_value = 0.5    
-    #node ColorRamp
-    colorramp = image_material.nodes.new("ShaderNodeValToRGB")
-    colorramp.color_ramp.color_mode = 'RGB'
-    colorramp.color_ramp.hue_interpolation = 'NEAR'
-    colorramp.color_ramp.interpolation = 'LINEAR'    
-    colorramp.color_ramp.elements.remove(colorramp.color_ramp.elements[0])
-    colorramp_cre_0 = colorramp.color_ramp.elements[0]
-    colorramp_cre_0.position = 0.0
-    colorramp_cre_0.alpha = 0.0
-    colorramp_cre_0.color = (0.0, 0.0, 0.0, 0.0)   
-    colorramp_cre_1 = colorramp.color_ramp.elements.new(1.0)
-    colorramp_cre_1.alpha = 1.0
-    colorramp_cre_1.color = (1.0, 1.0, 1.0, 1.0)
-    #node Volume Info
-    volume_info = image_material.nodes.new("ShaderNodeVolumeInfo")   
-    #node Principled Volume
-    principled_volume = image_material.nodes.new("ShaderNodeVolumePrincipled")
-    #Color
-    principled_volume.inputs[0].default_value = (0.5, 0.5, 0.5, 1.0)
-    #Color Attribute
-    principled_volume.inputs[1].default_value = ""
-    #Density
-    principled_volume.inputs[2].default_value = 0.0
-    #Density Attribute
-    principled_volume.inputs[3].default_value = "density"
-    #Anisotropy
-    principled_volume.inputs[4].default_value = 0.0
-    #Absorption Color
-    principled_volume.inputs[5].default_value = (0.0, 0.0, 0.0, 1.0)
-    #Blackbody Intensity
-    principled_volume.inputs[8].default_value = 0.0
-    #Blackbody Tint
-    principled_volume.inputs[9].default_value = (1.0, 1.0, 1.0, 1.0)
-    #Temperature
-    principled_volume.inputs[10].default_value = 1000.0
-    #Temperature Attribute
-    principled_volume.inputs[11].default_value = "temperature"
-    #Weight
-    principled_volume.inputs[12].default_value = 0.0    
-    #Set locations
-    material_output.location = (300.0, 300.0)
-    math.location = (-290.64935302734375, 185.22756958007812)
-    colorramp.location = (-650.9771118164062, 14.403594970703125)
-    volume_info.location = (-876.3124389648438, -123.81324768066406)
-    principled_volume.location = (-85.48944091796875, 91.50717163085938)   
-    #Set dimensions
-    material_output.width, material_output.height = 140.0, 100.0
-    math.width, math.height = 140.0, 100.0
-    colorramp.width, colorramp.height = 240.0, 100.0
-    volume_info.width, volume_info.height = 140.0, 100.0
-    principled_volume.width, principled_volume.height = 240.0, 100.0    
-    #initialize image_material links
-    #colorramp.Color -> math.Value
-    image_material.links.new(colorramp.outputs[0], math.inputs[0])
-    #colorramp.Color -> principled_volume.Emission Color
-    image_material.links.new(colorramp.outputs[0], principled_volume.inputs[7])
-    #volume_info.Density -> colorramp.Fac
-    image_material.links.new(volume_info.outputs[1], colorramp.inputs[0])
-    #math.Value -> principled_volume.Emission Strength
-    image_material.links.new(math.outputs[0], principled_volume.inputs[6])
-    #principled_volume.Volume -> material_output.Volume
-    image_material.links.new(principled_volume.outputs[0], material_output.inputs[1])
-
-
-def apply_image_shader():
-    return image_material_shader()
+    return True
 
 
 def ct_volume_to_mesh_node_group():
