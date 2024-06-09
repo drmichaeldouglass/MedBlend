@@ -11,33 +11,20 @@ def make_mlc_leaf(MLC_index = 1):
     y_dim = 40
     z_dim = 1
     
-    # Create a cube and set its dimensions
-    bpy.ops.mesh.primitive_cube_add(size=1)
-    cube = bpy.context.active_object
-    cube.dimensions = (x_dim, y_dim, z_dim)
+    # Create an empty object
+    bpy.ops.object.empty_add(location=(0, 0, 0))
+    empty = bpy.context.active_object
     
-    # Move the origin point to the end of the cube
-    
-    # Enter edit mode
-    bpy.ops.object.mode_set(mode='EDIT')
-
-    # Move the selected object by 5 meters in the Y direction
+    # Move the origin point to the end of the empty object
     if MLC_index <= 59:
-        
-        bpy.ops.transform.translate(value=(0, y_dim/2, 0))
+        empty.location.y = y_dim/2
     else:
-        bpy.ops.transform.translate(value=(0, -y_dim/2, 0))
-        
+        empty.location.y = -y_dim/2
 
-    # Re-enter object mode
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-
-    bpy.context.object.location[0] = np.mod(MLC_index,60)*x_dim
-    #bpy.context.object.location[1] = MLC_index//60
+    empty.location.x = np.mod(MLC_index,60)*x_dim
 
 
-ds = pydicom.dcmread("C:\MedBlend\Rando Test Files\Xray\CT\RP1.2.752.243.1.1.20230109113526003.1830.31818.dcm")
+ds = pydicom.dcmread(r"./plan.dcm")
 beam_num = 0
 #MLC_positions_all = []
 for beam in ds.BeamSequence:
@@ -63,9 +50,9 @@ for MLC_Number in range(0,mlc_positions.shape[1]):
         
         if MLC_Number <= 59:
         
-            bpy.context.object.location.y = -mlc_positions[frame,MLC_Number]
+            bpy.context.object.location.y = -mlc_positions[frame,MLC_Number]/2
         else:
-            bpy.context.object.location.y = -mlc_positions[frame,MLC_Number]
+            bpy.context.object.location.y = -mlc_positions[frame,MLC_Number]/2
        
         
         bpy.context.object.keyframe_insert(data_path="location", frame=frame)

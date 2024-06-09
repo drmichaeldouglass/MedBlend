@@ -1,0 +1,107 @@
+schema_version = "1.0.0"
+
+# Example of manifest file for a Blender extension
+# Change the values according to your extension
+id = "MedBlend"
+version = "2.0.0"
+name = "MedBlend"
+tagline = "A Medical Visulisation Add-On for Blender"
+maintainer = "Michael Douglass"
+# Supported types: "add-on", "theme"
+type = "add-on"
+
+# Optional link to documentation, support, source files, etc
+# website = "https://github.com/drmichaeldouglass/MedBlend"
+
+# Optional list defined by Blender and server, see:
+# https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
+tags = ["3D View"]
+
+blender_version_min = "4.2.0"
+# Optional: maximum supported Blender version
+# blender_version_max = "5.1.0"
+
+# License conforming to https://spdx.org/licenses/ (use "SPDX: prefix)
+# https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
+license = [
+  "SPDX:MIT",
+]
+# Optional: required by some licenses.
+# copyright = [
+#   "2002-2024 Developer Name",
+#   "1998 Company Name",
+# ]
+
+# Optional list of supported platforms. If omitted, the extension will be available in all operating systems.
+# platforms = ["windows-x64", "macos-arm64", "linux-x64"]
+# Other supported platforms: "windows-arm64", "macos-x64"
+
+# Optional: bundle 3rd party Python modules.
+# https://docs.blender.org/manual/en/dev/advanced/extensions/python_wheels.html
+wheels = [
+    "./wheels/certifi-2024.6.2-py3-none-any.whl",
+    "./wheels/charset_normalizer-3.3.2-cp311-cp311-win_amd64.whl",
+    "./wheels/click-8.1.7-py3-none-any.whl",
+    "./wheels/colorama-0.4.6-py2.py3-none-any.whl",
+    "./wheels/contourpy-1.2.1-cp311-cp311-win_amd64.whl",
+    "./wheels/cycler-0.12.1-py3-none-any.whl",
+    "./wheels/dataclasses-0.6-py3-none-any.whl",
+    "./wheels/fonttools-4.53.0-cp311-cp311-win_amd64.whl",        
+    "./wheels/idna-3.7-py3-none-any.whl",
+    "./wheels/imageio-2.34.1-py3-none-any.whl",
+    "./wheels/kiwisolver-1.4.5-cp311-cp311-win_amd64.whl",        
+    "./wheels/lazy_loader-0.4-py3-none-any.whl",
+    "./wheels/matplotlib-3.9.0-cp311-cp311-win_amd64.whl",        
+    "./wheels/networkx-3.3-py3-none-any.whl",
+    "./wheels/numpy-1.26.4-cp311-cp311-win_amd64.whl",
+    "./wheels/opencv_python-4.10.0.82-cp37-abi3-win_amd64.whl",   
+    "./wheels/packaging-24.0-py3-none-any.whl",
+    "./wheels/pandas-2.2.2-cp311-cp311-win_amd64.whl",
+    "./wheels/pillow-10.3.0-cp311-cp311-win_amd64.whl",
+    "./wheels/platipy-0.7.1-py3-none-any.whl",
+    "./wheels/pydicom-2.4.4-py3-none-any.whl",
+    "./wheels/pynetdicom-2.1.0-py3-none-any.whl",
+    "./wheels/pyparsing-3.1.2-py3-none-any.whl",
+    "./wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",  
+    "./wheels/pytz-2024.1-py2.py3-none-any.whl",
+    "./wheels/requests-2.32.3-py3-none-any.whl",
+    "./wheels/rt_utils-1.2.7-py2.py3-none-any.whl",
+    "./wheels/scikit_image-0.23.2-cp311-cp311-win_amd64.whl",     
+    "./wheels/scipy-1.13.1-cp311-cp311-win_amd64.whl",
+    "./wheels/SimpleITK-2.3.1-cp311-cp311-win_amd64.whl",
+    "./wheels/six-1.16.0-py2.py3-none-any.whl",
+    "./wheels/tifffile-2024.5.22-py3-none-any.whl",
+    "./wheels/tzdata-2024.1-py2.py3-none-any.whl",
+    "./wheels/urllib3-2.2.1-py3-none-any.whl"
+ ]
+
+## Optional: add-ons can list which resources they will require:
+## * files (for access of any filesystem operations)
+## * network (for internet access)
+## * clipboard (to read and/or write the system clipboard)
+## * camera (to capture photos and videos)
+## * microphone (to capture audio)
+##
+## If using network, remember to also check `bpy.app.online_access`
+## https://docs.blender.org/manual/en/dev/advanced/extensions/addons.html#internet-access
+##
+## For each permission it is important to also specify the reason why it is required.
+## Keep this a single short sentence without a period (.) at the end.
+## For longer explanations use the documentation or detail page.
+#
+# [permissions]
+# network = "Need to sync motion-capture data to server"
+# files = "Import/export FBX from/to disk"
+# clipboard = "Copy and paste bone transforms"
+
+# Optional: build settings.
+# https://docs.blender.org/manual/en/dev/advanced/extensions/command_line_arguments.html#command-line-args-extension-build
+[build]
+paths = [
+    "/assets/",
+]
+
+paths_exclude_pattern = [
+    "/.git/",
+    "__pycache__/",
+    ]

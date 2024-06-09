@@ -22,25 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
 
-bl_info = {
-    "name" : "MedBlend",
-    "author" : "Michael Douglass", 
-    "description" : "A Medical image visulisation tool for Blender",
-    "blender" : (4, 0, 2),
-    "version" : (1, 0, 0),
-    "location" : "Australia",
-    "warning" : "",
-    "doc_url": "https://github.com/drmichaeldouglass/MedBlend", 
-    "tracker_url": "", 
-    "category" : "3D View" 
-}
-
 
 import bpy
 import bpy.utils.previews
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 import pyopenvdb as openvdb
 import numpy as np
+import pydicom
+import platipy
+from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
+from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
+import SimpleITK as sitk
 
 import os
 from pathlib import Path
@@ -63,7 +55,6 @@ from .dicom_util import (
 )
 from .node_groups import apply_DICOM_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
 from .blender_utils import add_data_fields, create_object
-from .install_modules import verify_user_sitepackages, install_python_modules, check_dependencies
 
 #A function to display custom messages to the user
 def show_message_box(message = "", title = "Message Box", icon = 'INFO'):
@@ -77,7 +68,7 @@ addon_keymaps = {}
 _icons = None
 class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
     bl_label = 'MedBlend'
-    bl_idname = 'SNA_PT_MEDBLEND_70A7C'
+    bl_idname = __package__
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_context = ''
@@ -96,25 +87,21 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
         layout = self.layout
         
         #Only displays the load buttons if the required dependancies are installed
-        if check_dependencies():
-            layout.label(text='Images', icon_value=125)
-            op = layout.operator('sna.load_ct_fc7b9', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
-            layout.label(text='Dose', icon_value=851)
-            op = layout.operator('sna.load_dose_7629f', text='Load DICOM Dose', icon_value=0, emboss=True, depress=False)
-            layout.label(text='Structures', icon_value=304)
-            op = layout.operator('sna.load_structures_5ebc9', text='Load DICOM Structures', icon_value=0, emboss=True, depress=False)
-            layout.label(text='Proton Spots', icon_value=653)
-            op = layout.operator('sna.load_proton_1dbc6', text='Load Proton Plan', icon_value=0, emboss=True, depress=False)
-
-        else:
-            layout.label(text='Install Python Dependancies', icon_value=0)
-            op = layout.operator('sna.install_python_dependancies', text='Install Dependancies', icon_value=0, emboss=True, depress=False)
+        
+        layout.label(text='Images', icon_value=125)
+        op = layout.operator('medblend.load_ct', text='Load DICOM Images', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Dose', icon_value=851)
+        op = layout.operator('medblend.load_dose', text='Load DICOM Dose', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Structures', icon_value=304)
+        op = layout.operator('medblend.load_structures', text='Load DICOM Structures', icon_value=0, emboss=True, depress=False)
+        layout.label(text='Proton Spots', icon_value=653)
+        op = layout.operator('medblend.load_proton', text='Load Proton Plan', icon_value=0, emboss=True, depress=False)
 
 
 
 #Class to load CT or MRI Images
 class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
-    bl_idname = "sna.load_ct_fc7b9"
+    bl_idname = 'medblend.load_ct'
     bl_label = "Load CT"
     bl_description = "Load a CT Dataset"
     bl_options = {"REGISTER", "UNDO"}
@@ -130,10 +117,6 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
         file_name_CT = self.filepath
         print('The name of the CT is ' + str(file_name_CT))
 
-        try:
-            import pydicom
-        except:
-            print('Modules Not Installed')
 
         selected_file = pydicom.dcmread(file_name_CT)
         if check_dicom_image_type(selected_file):
@@ -203,7 +186,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
 
 #Class to load Proton Plan files
 class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
-    bl_idname = "sna.load_proton_1dbc6"
+    bl_idname = 'medblend.load_proton'
     bl_label = "Load Proton"
     bl_description = "Load Proton Spots and Weights"
     bl_options = {"REGISTER", "UNDO"}
@@ -218,10 +201,6 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         file_name_proton = self.filepath
 
-        try:
-            import pydicom
-        except:
-            print('Modules not installed')
         
         import math
         pi_value = math.pi
@@ -327,7 +306,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
 
 #Class to load DICOM Dose files
 class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
-    bl_idname = "sna.load_dose_7629f"
+    bl_idname = 'medblend.load_dose'
     bl_label = "Load Dose"
     bl_description = "Load a DICOM Dose File"
     bl_options = {"REGISTER", "UNDO"}
@@ -341,11 +320,6 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         file_name_dose = self.filepath
-
-        try:
-            import pydicom
-        except:
-            print('Modules not installed')
         
         #Directory containing DICOM images
         DICOM_dir = file_name_dose
@@ -426,7 +400,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
 
 #Class to load DICOM Structure files as volumes
 class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
-    bl_idname = "sna.load_structures_5ebc9"
+    bl_idname = 'medblend.load_structures'
     bl_label = "Load Structures"
     bl_description = "Load a DICOM Structure Set"
     bl_options = {"REGISTER", "UNDO"}
@@ -441,15 +415,6 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         
         from pathlib import Path
         structure_path  = self.filepath
-
-        try:
-            import pydicom
-            import platipy
-            from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
-            from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
-            import SimpleITK as sitk
-        except:
-            print('Modules not installed')
 
         # Assume structure_file_path is the path to the structure file specified by the user
         structure_file_path = Path(structure_path)
@@ -514,28 +479,7 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
             #print(struct_names[i])
 
         return {"FINISHED"}
-    
-class install_python_dependancies(bpy.types.Operator):
-    bl_idname = "sna.install_python_dependancies"
-    bl_label = "Load Python Dependancies"
-    bl_description = "Loads Python Modules required for MedBlend"
-    bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set('')
-        return not False
-
-    def execute(self, context):
-        
-
-        pydicom_install_successful = install_python_modules()
-
-        return {"FINISHED"}
-
-    def invoke(self, context, event):
-        return self.execute(context)
 
 
 def register():
@@ -546,7 +490,7 @@ def register():
     bpy.utils.register_class(SNA_OT_Load_Proton_1Dbc6)
     bpy.utils.register_class(SNA_OT_Load_Dose_7629F)
     bpy.utils.register_class(SNA_OT_Load_Structures_5Ebc9)
-    bpy.utils.register_class(install_python_dependancies)
+ 
     
 
 
@@ -563,7 +507,6 @@ def unregister():
     bpy.utils.unregister_class(SNA_OT_Load_Proton_1Dbc6)
     bpy.utils.unregister_class(SNA_OT_Load_Dose_7629F)
     bpy.utils.unregister_class(SNA_OT_Load_Structures_5Ebc9)
-    bpy.utils.unregister_class(install_python_dependancies)
     
     
 #register()

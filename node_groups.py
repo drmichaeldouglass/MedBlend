@@ -27,10 +27,6 @@ def apply_DICOM_shader(shader_name):
     else:
         bpy.context.object.data.materials.append(bpy.data.materials[shader_name])
 
-
-
-        
-
     return True
 
 
