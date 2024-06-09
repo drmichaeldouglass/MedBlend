@@ -22,6 +22,11 @@ This package is intended for research or educational purposes only and should no
 
 ## Requirements
 MedBlend utilises the pydicom module and is installed as a dependancy when you enable the add-on in Blender. The add-on also uses the pyopenvdb module which has recently been added to Blender version 3.5. 
+Other Modules:
+- numpy
+- pydicom
+- platipy
+- SimpleITK
 
 ## Installation
 
