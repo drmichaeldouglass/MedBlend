@@ -28,11 +28,8 @@ import bpy.utils.previews
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 import pyopenvdb as openvdb
 import numpy as np
-import pydicom
-import platipy
-from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
-from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
-import SimpleITK as sitk
+
+
 
 import os
 from pathlib import Path
@@ -40,6 +37,11 @@ import subprocess
 import sys
 import site
 
+import pydicom
+import platipy
+from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
+from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
+import SimpleITK as sitk
 
 #Custom Packages
 from .proton import is_proton_plan
@@ -114,6 +116,8 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
         return not False
 
     def execute(self, context):
+        
+        
         file_name_CT = self.filepath
         print('The name of the CT is ' + str(file_name_CT))
 
