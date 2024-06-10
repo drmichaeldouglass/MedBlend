@@ -28,22 +28,20 @@ import bpy.utils.previews
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 import pyopenvdb as openvdb
 import numpy as np
-
-
-
 import os
 from pathlib import Path
 import subprocess
 import sys
 import site
 
+#Import 3rd party packages from Python Wheels
 import pydicom
 import platipy
 from platipy.dicom.io.rtstruct_to_nifti import read_dicom_image
 from platipy.dicom.io.rtstruct_to_nifti import transform_point_set_from_dicom_struct
 import SimpleITK as sitk
 
-#Custom Packages
+#MedBlend Custom Packages
 from .proton import is_proton_plan
 from .dicom_util import (
     check_dicom_image_type, 
@@ -55,7 +53,7 @@ from .dicom_util import (
     extract_dicom_data, 
     filter_by_series_uid
 )
-from .node_groups import apply_DICOM_shader, add_CT_to_volume_geo_nodes, add_proton_geo_nodes
+from .node_groups import apply_DICOM_shader, apply_proton_spots_geo_nodes
 from .blender_utils import add_data_fields, create_object
 
 #A function to display custom messages to the user
@@ -302,7 +300,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
             obj.location[2] = iso_center[2]
             
             BeamNo = BeamNo + 1
-            add_proton_geo_nodes()
+            apply_proton_spots_geo_nodes(node_tree_name = 'Proton_Spots')
             
             
         #print(np.shape(weights))
