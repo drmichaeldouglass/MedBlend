@@ -5,14 +5,14 @@ schema_version = "1.0.0"
 id = "medblend"
 version = "2.0.0"
 name = "MedBlend"
-tagline = "A medical visulisation add-on for Blender"
+tagline = "Medical visualization tools for Blender"
 maintainer = "Michael Douglass"
 type = "add-on"
 website = "https://github.com/drmichaeldouglass/MedBlend"
 tags = [
 	"3D View",
 ]
-blender_version_min = "4.2.0"
+blender_version_min = "4.5.0"
 license = [
   "SPDX:MIT"
 ]
