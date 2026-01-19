@@ -1,4 +1,1 @@
-numpy
 pydicom
-platipy
-SimpleITK

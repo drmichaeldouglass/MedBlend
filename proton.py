@@ -1,17 +1,8 @@
-import bpy
-import os
-from . constants import ADDON_DIR
+"""Backward-compatible proton helpers (deprecated)."""
 
-def is_proton_plan(ds):
-    """
-    Checks if the DICOM file at the given path is of type dose.
-    Returns True if it is, False otherwise.
-    """
-    try:
-        if ds.Modality == 'RTIon':
-            return True
-        else:
-            return False
-    except:
-        return False
+from __future__ import annotations
+
+from .plan import is_proton_plan
+
+__all__ = ["is_proton_plan"]
 

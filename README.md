@@ -21,12 +21,12 @@ This Blender add-on is intended to be used to create visulisations of radiation 
 This package is intended for research or educational purposes only and should not be used for clinical applications. By using this add-on you accept that this software is provided without warranty and the author will not be held liable for any damages caused by the use of this software. 
 
 ## Requirements
-MedBlend utilises the pydicom module and is installed as a dependancy when you enable the add-on in Blender. The add-on also uses the pyopenvdb module which has recently been added to Blender version 3.5. 
-Other Modules:
-- numpy
-- pydicom
-- platipy
-- SimpleITK
+MedBlend requires only the pydicom module, which is installed when you enable the add-on in Blender.
+
+Optional modules are needed for some features:
+- numpy (CT and dose volume conversion)
+- pyopenvdb (volume import/export; bundled with Blender 3.5+)
+- platipy and SimpleITK (RT structure conversion)
 
 ## Installation
 

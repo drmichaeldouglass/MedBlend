@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
-
-import numpy as np
 import pydicom
 
 
@@ -58,6 +56,8 @@ def load_dicom_images(folder: Path) -> List[pydicom.Dataset]:
 def rescale_dicom_image(array: np.ndarray) -> np.ndarray:
     """Scale the array into the range ``[0, 1]``."""
 
+    import numpy as np
+
     min_value = float(np.min(array))
     max_value = float(np.max(array))
     if max_value == min_value:
@@ -76,6 +76,8 @@ def extract_dicom_data(
     images: Sequence[pydicom.Dataset],
 ) -> Tuple[np.ndarray, Sequence[float], Sequence[float], float, Sequence[float], Sequence[float], int]:
     """Extract voxel data and metadata from the provided DICOM slices."""
+
+    import numpy as np
 
     if not images:
         raise ValueError("No DICOM images were provided for extraction")
