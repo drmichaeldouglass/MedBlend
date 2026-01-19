@@ -30,6 +30,26 @@ addon_keymaps = {}
 _icons = None
 
 
+def _get_prefs(context) -> bpy.types.AddonPreferences | None:
+    addon = context.preferences.addons.get(__package__)
+    return addon.preferences if addon else None
+
+
+class MEDBLEND_Preferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+
+    vdb_temp_dir: bpy.props.StringProperty(
+        name="VDB Temp Directory",
+        description="Directory to store temporary VDB files",
+        subtype="NONE",
+        default="",
+    )
+
+    def draw(self, _context):
+        layout = self.layout
+        layout.prop(self, "vdb_temp_dir")
+
+
 class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
     bl_label = "MedBlend"
     bl_idname = __package__
@@ -47,6 +67,52 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
         layout.operator("medblend.load_structures", text="Load DICOM Structures", icon="FILEBROWSER")
         layout.label(text="Proton Spots")
         layout.operator("medblend.load_proton", text="Load Proton Plan", icon="FILEBROWSER")
+        layout.separator()
+        layout.label(text="VDB Temp Directory")
+        prefs = _get_prefs(_context)
+        if prefs:
+            row = layout.row(align=True)
+            row.prop(prefs, "vdb_temp_dir", text="")
+            row.operator("medblend.select_vdb_temp_dir", text="", icon="FILE_FOLDER")
+            row.operator("medblend.clear_vdb_temp_dir", text="", icon="X")
+        else:
+            layout.label(text="Add-on preferences not available")
+
+
+class MEDBLEND_OT_Select_Vdb_Temp_Dir(bpy.types.Operator):
+    bl_idname = "medblend.select_vdb_temp_dir"
+    bl_label = "Select VDB Temp Directory"
+    bl_description = "Choose directory for temporary VDB files"
+
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+
+    def execute(self, context):
+        prefs = _get_prefs(context)
+        if not prefs:
+            return {"CANCELLED"}
+        selected_dir = Path(self.directory) if self.directory else Path(self.filepath)
+        if selected_dir.is_file():
+            selected_dir = selected_dir.parent
+        prefs.vdb_temp_dir = bpy.path.abspath(str(selected_dir))
+        return {"FINISHED"}
+
+    def invoke(self, context, _event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+
+class MEDBLEND_OT_Clear_Vdb_Temp_Dir(bpy.types.Operator):
+    bl_idname = "medblend.clear_vdb_temp_dir"
+    bl_label = "Clear VDB Temp Directory"
+    bl_description = "Use Blender temporary directory for VDB files"
+
+    def execute(self, context):
+        prefs = _get_prefs(context)
+        if not prefs:
+            return {"CANCELLED"}
+        prefs.vdb_temp_dir = ""
+        return {"FINISHED"}
 
 
 class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
@@ -98,7 +164,10 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
 
 
 classes: Iterable[type] = (
+    MEDBLEND_Preferences,
     SNA_PT_MEDBLEND_70A7C,
+    MEDBLEND_OT_Select_Vdb_Temp_Dir,
+    MEDBLEND_OT_Clear_Vdb_Temp_Dir,
     SNA_OT_Load_Ct_Fc7B9,
     SNA_OT_Load_Proton_1Dbc6,
     SNA_OT_Load_Dose_7629F,

@@ -12,3 +12,11 @@ __pycache__/install_modules.cpython-311.pyc
 __pycache__/node_groups.cpython-311.pyc
 __pycache__/proton.cpython-311.pyc
 assets/MedBlend_Assets.blend1
+__pycache__/ct.cpython-311.pyc
+__pycache__/dose.cpython-311.pyc
+__pycache__/plan.cpython-311.pyc
+.gitignore
+__pycache__/structure.cpython-311.pyc
+__pycache__/ui_utils.cpython-311.pyc
+.gitignore
+.gitignore

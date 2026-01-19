@@ -42,8 +42,17 @@ def load_proton_plan(file_path: Path) -> bool:
         show_message_box("Selected file is not an RT Ion proton plan.", "Error", "ERROR")
         return False
 
-    for beam_index, beam in enumerate(dataset.IonBeamSequence):
+    ion_beams = getattr(dataset, "IonBeamSequence", None)
+    if not ion_beams:
+        show_message_box("RT Ion plan is missing IonBeamSequence.", "Error", "ERROR")
+        return False
+
+    for beam_index, beam in enumerate(ion_beams):
         control_points = beam.IonControlPointSequence
+        if not control_points:
+            show_message_box(f"Beam {beam_index} has no control points.", "Error", "ERROR")
+            continue
+
         num_control_points = len(control_points)
 
         x_vals: list[float] = []
@@ -52,13 +61,34 @@ def load_proton_plan(file_path: Path) -> bool:
         spot_weights: list[float] = []
 
         for idx in range(0, num_control_points, 2):
-            positions = control_points[idx].ScanSpotPositionMap
-            weights = control_points[idx].ScanSpotMetersetWeights
+            positions = getattr(control_points[idx], "ScanSpotPositionMap", None)
+            weights = getattr(control_points[idx], "ScanSpotMetersetWeights", None)
+            if not positions or not weights:
+                show_message_box(
+                    f"Beam {beam_index} control point {idx} is missing spot positions or weights.",
+                    "Error",
+                    "ERROR",
+                )
+                continue
+            if len(positions) % 2 != 0:
+                show_message_box(
+                    f"Beam {beam_index} control point {idx} has an odd number of spot positions.",
+                    "Error",
+                    "ERROR",
+                )
+                continue
             for pos_index in range(0, len(positions), 2):
                 x_vals.append(positions[pos_index] / 1000.0)
                 y_vals.append(positions[pos_index + 1] / 1000.0)
-                energies.append(float(control_points[idx].NominalBeamEnergy) / 1000.0)
                 weight_index = int(pos_index / 2)
+                if weight_index >= len(weights):
+                    show_message_box(
+                        f"Beam {beam_index} control point {idx} has fewer weights than positions.",
+                        "Error",
+                        "ERROR",
+                    )
+                    continue
+                energies.append(float(getattr(control_points[idx], "NominalBeamEnergy", 0.0)) / 1000.0)
                 spot_weights.append(weights[weight_index])
 
         mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
@@ -66,6 +96,8 @@ def load_proton_plan(file_path: Path) -> bool:
         add_data_fields(mesh, data_fields)
 
         count = len(spot_weights)
+        if count == 0:
+            continue
         mesh.vertices.add(count)
 
         for row in range(count):
@@ -80,8 +112,9 @@ def load_proton_plan(file_path: Path) -> bool:
 
         if mesh.vertices:
             obj = create_object(mesh, mesh.name)
-            gantry_angle = float(control_points[0].GantryAngle) if hasattr(control_points[0], "GantryAngle") else 0.0
-            iso_center = tuple(val / 1000.0 for val in control_points[0].IsocenterPosition)
+            gantry_angle = float(getattr(control_points[0], "GantryAngle", 0.0))
+            iso_center_raw = getattr(control_points[0], "IsocenterPosition", (0.0, 0.0, 0.0))
+            iso_center = tuple(val / 1000.0 for val in iso_center_raw)
             obj.rotation_euler[1] = gantry_angle * math.pi / 180.0
             obj.location = (iso_center[0], iso_center[1], iso_center[2])
             apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots")
