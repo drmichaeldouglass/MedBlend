@@ -3,11 +3,45 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Iterable
 
 import bpy
 import bpy.utils.previews
 from bpy_extras.io_utils import ImportHelper
+
+
+def _ensure_pydicom_available() -> None:
+    """Make sure ``pydicom`` is importable in Blender's Python runtime.
+
+    The add-on ships a wheel in ``wheels/``. Adding the wheel path to
+    ``sys.path`` allows Python to import it without requiring network access
+    or a separate pip install.
+    """
+
+    try:
+        import pydicom  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+
+    addon_dir = Path(__file__).resolve().parent
+    wheels_dir = addon_dir / "wheels"
+    for wheel in sorted(wheels_dir.glob("pydicom-*.whl")):
+        wheel_path = str(wheel)
+        if wheel_path not in sys.path:
+            sys.path.insert(0, wheel_path)
+
+    try:
+        import pydicom  # noqa: F401
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "MedBlend could not import pydicom. Ensure a compatible pydicom wheel "
+            "exists in the add-on's wheels folder."
+        ) from exc
+
+
+_ensure_pydicom_available()
 
 from .ct import load_ct_series
 from .dose import load_dose
