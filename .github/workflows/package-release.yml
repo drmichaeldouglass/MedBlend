@@ -1,0 +1,44 @@
+name: Package MedBlend Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build release zip
+        run: |
+          ZIP_NAME="MedBlend.zip"
+          STAGE_DIR="$(mktemp -d)"
+          mkdir -p "$STAGE_DIR/MedBlend"
+
+          rsync -a ./ "$STAGE_DIR/MedBlend/" \
+            --exclude ".git/" \
+            --exclude ".github/" \
+            --exclude ".gitignore" \
+            --exclude ".gitattributes" \
+            --exclude ".gitmodules" \
+            --exclude "__pycache__/" \
+            --exclude "development scripts/"
+
+          (
+            cd "$STAGE_DIR"
+            zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" "MedBlend"
+          )
+
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload zip to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
