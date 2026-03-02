@@ -24,9 +24,8 @@ This package is intended for research or educational purposes only and should no
 MedBlend requires only the pydicom module, which is installed when you enable the add-on in Blender.
 
 Optional modules are needed for some features:
-- numpy (CT and dose volume conversion)
-- pyopenvdb (volume import/export; bundled with Blender 3.5+)
-- platipy and SimpleITK (RT structure conversion)
+- numpy (CT, dose, and RT structure conversion)
+- pyopenvdb (volume import/export; bundled with Blender 5.0+)
 
 ## Installation
 
@@ -41,7 +40,7 @@ Download the add-on installation file which will be of the form: "medblend_0.0.1
 
 If you have local administrator rights to run Blender then use these instructions otherwise, use the instructions in the next section.
 
-Open Blender 3.5, ensuring to run Blender using administrator privalidges. From the Edit-->Preferences menu. Select "Add-ons". Then press install and find the medblend_0.0.1.zip file in the file explorer.
+Open Blender 5.0 or newer, ensuring to run Blender using administrator privileges when required by your OS policy. From the Edit-->Preferences menu, select "Add-ons", then press Install and select the MedBlend zip file.
 
 ![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
 ![add_on_install](https://user-images.githubusercontent.com/52724915/226311722-c2d06900-b1db-4056-a5ce-64bf2ca490ba.png)
@@ -64,13 +63,13 @@ Experimental builds can be downloaded here: https://builder.blender.org/download
 ![blender_portable](https://user-images.githubusercontent.com/52724915/226309978-c3b34cac-d97f-49c6-9ea9-76a086e76fb7.png)
 
 
-Ensure that the version of Blender that you download is 3.5 or later. Once downloaded, unzip the file and look for the file called Blender.exe. This version of Blender can be run locally without installation or saved to a USB drive. 
+Ensure that the version of Blender that you download is 5.0 or later. Once downloaded, unzip the file and look for Blender.exe. This version of Blender can be run locally without installation or saved to a USB drive. 
 
-Blender, by default will try and install add-ons to the directory: C:\Users\(username)\AppData\Roaming\Blender Foundation\Blender\3.5\scripts\addons. If you do not have administrator rights to your PC, you will not be able to install add-ons to this directory. Instead, you will need to manually install the add-on to the portable version of Blender you have just downloaded.
+Blender, by default, installs add-ons to a versioned scripts folder under your user profile (for example: C:\Users\(username)\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons). If you do not have administrator rights to your PC, you may need to manually install the add-on to the portable version of Blender you downloaded.
 
-Start by un-zipping the MedBlend add-on (medblend_0.0.1.zip) for example. Once un-zipped, you should have a folder called "medblend" which contains a file called init.py. Copy the folder "medblend" to the directory "D:\Blender3.5\3.5\scripts\addons" so that the directory structure now looks like "D:\Blender3.5\3.5\scripts\addons\medblend\init.py". Your path to Blender 3.5 might look different, so change accordingly. 
+Start by un-zipping the MedBlend add-on zip. Once un-zipped, you should have a folder called "medblend" that contains `__init__.py`. Copy the "medblend" folder into your portable Blender add-ons path (for example: "D:\Blender5.0\5.0\scripts\addons\medblend\__init__.py"). Your Blender path may differ.
 
-Load up Blender 3.5 portable by running blender.exe. When you select Edit-->Preferences and Add-Ons, you should find that MedBlend is already installed. 
+Load Blender portable by running Blender.exe. When you select Edit-->Preferences and Add-Ons, you should find that MedBlend is already installed. 
 
 ![add_on_install](https://user-images.githubusercontent.com/52724915/226311899-a479f86d-c611-4940-a706-d8814def3533.png)
 
@@ -78,7 +77,7 @@ Once installed, under the Medical category in the 3D viewport, select MedBlend a
 
 ![install_python](https://user-images.githubusercontent.com/52724915/226311909-2a25058e-d473-4225-917f-693ff46e39d7.png)
 
-Installing the python modules should download a module named "pydicom" to the following location "D:\Blender3.5\3.5\python\lib\site-packages". If pydicom is not in this location, MedBlend will not function correctly.
+MedBlend bundles wheels from the add-on `wheels/` directory. Include compatible wheels for required modules such as `pydicom` (and `numpy` if your Blender Python environment does not already provide it).
 
 ## How to use MedBlend
 
@@ -176,4 +175,3 @@ https://github.com/drmichaeldouglass/MedBlend
 DOI: 10.5281/zenodo.10633327
 
 ## References
-

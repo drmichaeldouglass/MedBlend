@@ -15,9 +15,9 @@ def create_object(mesh, name):
     for ob in bpy.context.selected_objects:
         ob.select_set(False)
     obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
+    collection = bpy.context.collection or bpy.context.scene.collection
+    collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
     return obj
-
 

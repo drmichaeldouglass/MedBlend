@@ -11,8 +11,19 @@ import bpy.utils.previews
 from bpy_extras.io_utils import ImportHelper
 
 
-def _ensure_pydicom_available() -> None:
-    """Make sure ``pydicom`` is importable in Blender's Python runtime.
+def _add_bundled_wheels_to_sys_path() -> None:
+    """Add bundled wheels to ``sys.path`` so imports can resolve without pip."""
+
+    addon_dir = Path(__file__).resolve().parent
+    wheels_dir = addon_dir / "wheels"
+    for wheel in sorted(wheels_dir.glob("*.whl")):
+        wheel_path = str(wheel)
+        if wheel_path not in sys.path:
+            sys.path.insert(0, wheel_path)
+
+
+def _ensure_required_module_available(module_name: str) -> None:
+    """Ensure a required module can be imported from bundled wheels.
 
     The add-on ships a wheel in ``wheels/``. Adding the wheel path to
     ``sys.path`` allows Python to import it without requiring network access
@@ -20,28 +31,24 @@ def _ensure_pydicom_available() -> None:
     """
 
     try:
-        import pydicom  # noqa: F401
+        __import__(module_name)
         return
     except ModuleNotFoundError:
         pass
 
-    addon_dir = Path(__file__).resolve().parent
-    wheels_dir = addon_dir / "wheels"
-    for wheel in sorted(wheels_dir.glob("pydicom-*.whl")):
-        wheel_path = str(wheel)
-        if wheel_path not in sys.path:
-            sys.path.insert(0, wheel_path)
+    _add_bundled_wheels_to_sys_path()
 
     try:
-        import pydicom  # noqa: F401
+        __import__(module_name)
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "MedBlend could not import pydicom. Ensure a compatible pydicom wheel "
-            "exists in the add-on's wheels folder."
+            f"MedBlend could not import required module '{module_name}'. Ensure a "
+            "compatible wheel exists in the add-on's wheels folder."
         ) from exc
 
 
-_ensure_pydicom_available()
+_add_bundled_wheels_to_sys_path()
+_ensure_required_module_available("pydicom")
 
 from .ct import load_ct_series
 from .dose import load_dose
@@ -75,7 +82,7 @@ class MEDBLEND_Preferences(bpy.types.AddonPreferences):
     vdb_temp_dir: bpy.props.StringProperty(
         name="VDB Temp Directory",
         description="Directory to store temporary VDB files",
-        subtype="NONE",
+        subtype="DIR_PATH",
         default="",
     )
 
@@ -86,7 +93,7 @@ class MEDBLEND_Preferences(bpy.types.AddonPreferences):
 
 class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
     bl_label = "MedBlend"
-    bl_idname = __package__
+    bl_idname = "MEDBLEND_PT_main"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Medical"
@@ -218,7 +225,8 @@ def register():
 
 def unregister():
     global _icons
-    bpy.utils.previews.remove(_icons)
+    if _icons is not None:
+        bpy.utils.previews.remove(_icons)
+        _icons = None
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-

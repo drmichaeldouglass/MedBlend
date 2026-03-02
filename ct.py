@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pydicom
 
 from .dicom_util import (
@@ -55,9 +56,50 @@ def load_ct_series(file_path: Path) -> bool:
     slice_spacing = slice_spacing or 1.0
     spacing_values = (float(slice_spacing), float(spacing[0]), float(spacing[1]))
 
-    output_path = write_vdb_volume(ct_volume, spacing_values, "CT.vdb")
-    if not output_path:
+    result = write_vdb_volume(ct_volume, spacing_values, "CT.vdb")
+    if not result:
         return False
+    _output_path, ct_object = result
+
+    try:
+        orientation = np.asarray(_image_orientation, dtype=float)
+        row_dir = orientation[:3]
+        col_dir = orientation[3:]
+        normal_dir = np.cross(row_dir, col_dir)
+        normal_norm = float(np.linalg.norm(normal_dir))
+        if normal_norm > 0:
+            normal_dir = normal_dir / normal_norm
+        else:
+            normal_dir = np.asarray([0.0, 0.0, 1.0], dtype=float)
+
+        # Array axis 0 is flipped in extract_dicom_data, so the imported array origin
+        # corresponds to the final source slice position.
+        slice_positions = np.asarray(_slice_position, dtype=float)
+        if slice_positions.ndim == 2 and slice_positions.shape[1] == 3 and len(slice_positions) > 0:
+            array_origin = slice_positions[-1]
+        else:
+            array_origin = np.asarray(_image_origin, dtype=float)
+
+        row_spacing = float(spacing[0])
+        col_spacing = float(spacing[1])
+        slice_step = float(slice_spacing)
+
+        # Basis columns map [slice, row, col] index steps to patient-space millimetres.
+        slice_axis = -normal_dir * slice_step
+        row_axis = col_dir * row_spacing
+        col_axis = row_dir * col_spacing
+        basis = np.column_stack((slice_axis, row_axis, col_axis))
+
+        frame_uid = getattr(selected_file, "FrameOfReferenceUID", "")
+        ct_object["medblend_is_ct"] = True
+        if frame_uid:
+            ct_object["medblend_frame_of_reference_uid"] = str(frame_uid)
+        ct_object["medblend_ct_origin_mm"] = [float(v) for v in array_origin]
+        ct_object["medblend_ct_basis_mm"] = [float(v) for v in basis.reshape(-1)]
+        ct_object["medblend_ct_spacing_mm"] = [float(v) for v in spacing_values]
+    except Exception:
+        # Metadata is best-effort and should not block import.
+        pass
 
     apply_dicom_shader("Image Material")
     return True
