@@ -86,7 +86,7 @@ Once installed, open the 3D viewport and select the Medical category from the si
 
 If Blender cannot write temporary VDB files in its default temp location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 
-![medBlendFunctions](https://user-images.githubusercontent.com/52724915/226313830-c5dbd57b-5199-40f0-befd-4f3da1883e45.png)
+<img width="393" height="349" alt="Screenshot 2026-03-08 at 9 17 49 pm" src="https://github.com/user-attachments/assets/d000dc5a-3752-46c7-a758-292e3ed7b100" />
 
 
 MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
