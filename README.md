@@ -21,11 +21,13 @@ This Blender add-on is intended to be used to create visulisations of radiation 
 This package is intended for research or educational purposes only and should not be used for clinical applications. By using this add-on you accept that this software is provided without warranty and the author will not be held liable for any damages caused by the use of this software. 
 
 ## Requirements
-MedBlend requires only the pydicom module, which is installed when you enable the add-on in Blender.
+MedBlend requires Blender 5.0 or newer.
+
+MedBlend ships with the required `pydicom` wheel in the add-on package, so no separate `pip` step or in-app dependency installer is required.
 
 Optional modules are needed for some features:
-- numpy (CT, dose, and RT structure conversion)
-- pyopenvdb (volume import/export; bundled with Blender 5.0+)
+- `numpy` (CT, dose, and RT structure conversion). This is included with standard Blender 5.0 builds.
+- `pyopenvdb` (volume import/export). This is bundled with Blender 5.0+.
 
 ## Installation
 
@@ -34,27 +36,28 @@ Optional modules are needed for some features:
 To download MedBlend, click the following link and select the latest release.
 https://github.com/drmichaeldouglass/MedBlend/tags
 
-Download the add-on installation file which will be of the form: "medblend_0.0.1.zip", for MedBlend version 0.0.1 for example. 
+Download the MedBlend release zip for the version you want to install.
 
-### Install MedBlend (If you have administrator rights to your PC)
+### Install MedBlend from the zip package
 
-If you have local administrator rights to run Blender then use these instructions otherwise, use the instructions in the next section.
+For most users, installing the zip through Blender is the correct process. Administrator rights are not normally required unless your OS or Blender installation location enforces them.
 
-Open Blender 5.0 or newer, ensuring to run Blender using administrator privileges when required by your OS policy. From the Edit-->Preferences menu, select "Add-ons", then press Install and select the MedBlend zip file.
+1. Open Blender 5.0 or newer.
+2. Go to `Edit > Preferences`.
+3. Open `Get Extensions` or `Add-ons` depending on your Blender build.
+4. Choose `Install from Disk` / `Install...` and select the MedBlend zip file.
+5. Enable MedBlend after installation if Blender does not enable it automatically.
 
 ![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
 ![add_on_install](https://user-images.githubusercontent.com/52724915/226311722-c2d06900-b1db-4056-a5ce-64bf2ca490ba.png)
 
-Once installed, under the Medical category in the 3D viewport, select MedBlend and then select "Install Python Modules". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient. Once complete, you may have to restart Blender for the new DICOM options to appear.
+After the add-on is enabled, MedBlend loads its bundled Python dependency automatically. There is no separate "Install Python Modules" step.
 
+Open the 3D viewport sidebar with `N`, select the `Medical` tab, and you should see the MedBlend import tools immediately.
 
+### Manual install for portable Blender or restricted environments
 
-![install_python](https://user-images.githubusercontent.com/52724915/226311500-9c8de27c-7180-4ca8-acc9-c29478600b96.png)
-
-
-### Install MedBlend (If you don't have administrator rights to your PC)
-
-If you don't have administrator rights to your PC, you can use MedBlend by installing the add-on to a portable version of Blender. The portable versions of Blender can be identified by the ".zip" type Blender downloads (shown in the figure below).
+If your environment does not allow normal add-on installation, you can install MedBlend manually into a portable Blender build.
 
 Releases of Blender can be downloaded from here: https://www.blender.org/download/
 
@@ -63,25 +66,25 @@ Experimental builds can be downloaded here: https://builder.blender.org/download
 ![blender_portable](https://user-images.githubusercontent.com/52724915/226309978-c3b34cac-d97f-49c6-9ea9-76a086e76fb7.png)
 
 
-Ensure that the version of Blender that you download is 5.0 or later. Once downloaded, unzip the file and look for Blender.exe. This version of Blender can be run locally without installation or saved to a USB drive. 
+Ensure that the version of Blender that you download is 5.0 or later. Once downloaded, unzip the file and look for `Blender.exe`. This version of Blender can be run locally without installation or saved to a USB drive.
 
 Blender, by default, installs add-ons to a versioned scripts folder under your user profile (for example: C:\Users\(username)\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons). If you do not have administrator rights to your PC, you may need to manually install the add-on to the portable version of Blender you downloaded.
 
 Start by un-zipping the MedBlend add-on zip. Once un-zipped, you should have a folder called "medblend" that contains `__init__.py`. Copy the "medblend" folder into your portable Blender add-ons path (for example: "D:\Blender5.0\5.0\scripts\addons\medblend\__init__.py"). Your Blender path may differ.
 
-Load Blender portable by running Blender.exe. When you select Edit-->Preferences and Add-Ons, you should find that MedBlend is already installed. 
+Load Blender portable by running `Blender.exe`. When you select `Edit > Preferences > Add-ons`, you should find that MedBlend is already installed.
 
 ![add_on_install](https://user-images.githubusercontent.com/52724915/226311899-a479f86d-c611-4940-a706-d8814def3533.png)
 
-Once installed, under the Medical category in the 3D viewport, select MedBlend and then select "Install Dependancies". This will install some additonal python modules to the Blender python installation which are required for MedBlend to function. This process can take up to a few minutes to complete, please be patient.
+Enable the add-on if needed. MedBlend will load the bundled `pydicom` wheel from its `wheels/` directory automatically when Blender starts the add-on. No dependency-install button is required.
 
-![install_python](https://user-images.githubusercontent.com/52724915/226311909-2a25058e-d473-4225-917f-693ff46e39d7.png)
-
-MedBlend bundles wheels from the add-on `wheels/` directory. Include compatible wheels for required modules such as `pydicom` (and `numpy` if your Blender Python environment does not already provide it).
+If you build your own package, make sure the `wheels/` directory is included in the zip so the bundled Python dependency can be found.
 
 ## How to use MedBlend
 
 Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. 
+
+If Blender cannot write temporary VDB files in its default temp location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 
 ![medBlendFunctions](https://user-images.githubusercontent.com/52724915/226313830-c5dbd57b-5199-40f0-befd-4f3da1883e45.png)
 
@@ -150,7 +153,7 @@ A test proton therapy plan on a phantom. The CT images, dose distribution and pr
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
 - CT, Dose and Structure locations are not perfectly co-registered yet (user may need to manually align them at the moment).
-- After installing the python modules, the DICOM functions sometimes do not appear. This can be fixed by restarting Blender.
+- If bundled dependencies were missing from the installed package, MedBlend will fail to load. Reinstall using the official release zip and ensure the `wheels/` directory is included.
 
 Please report any bugs as an issue on this repository
 
