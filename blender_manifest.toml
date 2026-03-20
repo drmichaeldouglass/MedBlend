@@ -22,7 +22,7 @@ copyright =[
 
 
 wheels = [
-    "./wheels/pydicom-2.4.4-py3-none-any.whl",
+    "./wheels/pydicom-3.0.1-py3-none-any.whl",
 ]
 
 [permissions]
