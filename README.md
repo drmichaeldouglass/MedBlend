@@ -21,13 +21,13 @@ This Blender add-on is intended to be used to create visulisations of radiation 
 This package is intended for research or educational purposes only and should not be used for clinical applications. By using this add-on you accept that this software is provided without warranty and the author will not be held liable for any damages caused by the use of this software. 
 
 ## Requirements
-MedBlend requires Blender 5.0 or newer.
+MedBlend requires Blender 5.0 or newer, and is intended to remain compatible with Blender 5.1.
 
 MedBlend ships with the required `pydicom` wheel in the add-on package, so no separate `pip` step or in-app dependency installer is required.
 
 Optional modules are needed for some features:
-- `numpy` (CT, dose, and RT structure conversion). This is included with standard Blender 5.0 builds.
-- `pyopenvdb` (volume import/export). This is bundled with Blender 5.0+.
+- `numpy` (CT, dose, and RT structure conversion). This is included with standard Blender 5.x builds, including Blender 5.1's Python 3.13 / NumPy 2.3 environment.
+- OpenVDB Python bindings (volume import/export). Blender 5.x builds may expose this as either `openvdb` or `pyopenvdb`; MedBlend now accepts both names.
 
 ## Installation
 
