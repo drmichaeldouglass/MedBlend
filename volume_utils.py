@@ -10,6 +10,18 @@ import bpy
 from .ui_utils import show_message_box
 
 
+def _default_temp_base_dir() -> Path:
+    temp_dir = bpy.app.tempdir
+    if temp_dir:
+        return Path(temp_dir)
+
+    cache_dir = getattr(bpy.app, "cachedir", "")
+    if cache_dir:
+        return Path(cache_dir)
+
+    return Path.cwd()
+
+
 def _get_vdb_temp_dir() -> Optional[Path]:
     addon = bpy.context.preferences.addons.get(__package__)
     if not addon:
@@ -29,7 +41,7 @@ def resolve_temp_path(target_name: str, base_dir: Optional[Path] = None) -> Path
     if preferred_dir:
         base_dir = preferred_dir
     else:
-        base_dir = Path(base_dir) if base_dir else Path(bpy.app.tempdir or Path.cwd())
+        base_dir = Path(base_dir) if base_dir else _default_temp_base_dir()
 
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -39,7 +51,7 @@ def resolve_temp_path(target_name: str, base_dir: Optional[Path] = None) -> Path
             "Error",
             "ERROR",
         )
-        base_dir = Path(bpy.app.tempdir or Path.cwd())
+        base_dir = _default_temp_base_dir()
         base_dir.mkdir(parents=True, exist_ok=True)
 
     return base_dir / target_name
@@ -84,6 +96,20 @@ def _import_volume_operator_fallback(output_path: Path) -> bpy.types.Object:
     raise RuntimeError("Unable to resolve imported volume object from operator fallback")
 
 
+def _import_openvdb_module():
+    last_exc = None
+    for module_name in ("openvdb", "pyopenvdb"):
+        try:
+            return __import__(module_name)
+        except Exception as exc:
+            last_exc = exc
+
+    raise ModuleNotFoundError(
+        "Neither 'openvdb' nor 'pyopenvdb' could be imported. "
+        "Ensure Blender ships a compatible OpenVDB Python module."
+    ) from last_exc
+
+
 def write_vdb_volume(
     array,
     spacing: Sequence[float],
@@ -106,7 +132,7 @@ def write_vdb_volume(
         return None
 
     try:
-        import openvdb
+        openvdb = _import_openvdb_module()
     except Exception as exc:
         show_message_box(f"openvdb is not available: {exc}", "Missing Dependency", "ERROR")
         return None
