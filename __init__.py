@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 from typing import Iterable
+import zipfile
 
 import bpy
 import bpy.utils.previews
@@ -12,14 +13,26 @@ from bpy_extras.io_utils import ImportHelper
 
 
 def _add_bundled_wheels_to_sys_path() -> None:
-    """Add bundled wheels to ``sys.path`` so imports can resolve without pip."""
+    """Extract bundled wheels to a lib/ dir and add it to sys.path.
+
+    Adding the .whl ZIP directly to sys.path allows importing modules but
+    prevents packages that access data files via the filesystem (like pydicom)
+    from working correctly. Extracting first makes the files available as
+    ordinary directories.
+    """
 
     addon_dir = Path(__file__).resolve().parent
     wheels_dir = addon_dir / "wheels"
+    lib_dir = addon_dir / "lib"
+    lib_dir.mkdir(exist_ok=True)
+
     for wheel in sorted(wheels_dir.glob("*.whl")):
-        wheel_path = str(wheel)
-        if wheel_path not in sys.path:
-            sys.path.insert(0, wheel_path)
+        with zipfile.ZipFile(wheel) as zf:
+            zf.extractall(lib_dir)
+
+    lib_path = str(lib_dir)
+    if lib_path not in sys.path:
+        sys.path.insert(0, lib_path)
 
 
 def _ensure_required_module_available(module_name: str) -> None:
