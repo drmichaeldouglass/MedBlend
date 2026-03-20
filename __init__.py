@@ -174,7 +174,7 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
     bl_label = "Load CT"
     bl_description = "Load a CT Dataset"
     bl_options = {"REGISTER", "UNDO"}
-    filter_glob: bpy.props.StringProperty(default="*.dcm", options={"HIDDEN"})
+    filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
         success = load_ct_series(Path(self.filepath))
@@ -186,7 +186,7 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
     bl_label = "Load Proton"
     bl_description = "Load Proton Spots and Weights"
     bl_options = {"REGISTER", "UNDO"}
-    filter_glob: bpy.props.StringProperty(default="*.dcm", options={"HIDDEN"})
+    filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
         success = load_proton_plan(Path(self.filepath))
@@ -198,7 +198,7 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
     bl_label = "Load Dose"
     bl_description = "Load a DICOM Dose File"
     bl_options = {"REGISTER", "UNDO"}
-    filter_glob: bpy.props.StringProperty(default="*.dcm", options={"HIDDEN"})
+    filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
         success = load_dose(Path(self.filepath))
@@ -210,7 +210,7 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
     bl_label = "Load Structures"
     bl_description = "Load a DICOM Structure Set"
     bl_options = {"REGISTER", "UNDO"}
-    filter_glob: bpy.props.StringProperty(default="*.dcm", options={"HIDDEN"})
+    filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
         success = load_structures(Path(self.filepath))

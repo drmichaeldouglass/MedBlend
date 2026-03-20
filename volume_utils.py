@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
 import bpy
+import numpy as np
+from mathutils import Matrix
 
 from .ui_utils import show_message_box
 
@@ -62,6 +64,71 @@ def _link_object_to_context_collection(obj: bpy.types.Object) -> None:
     collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
+
+
+def set_object_patient_transform(
+    obj: bpy.types.Object,
+    origin_mm: Sequence[float],
+    slice_dir: Sequence[float],
+    row_dir: Sequence[float],
+    col_dir: Sequence[float],
+) -> None:
+    rot = Matrix(
+        (
+            (float(slice_dir[0]), float(row_dir[0]), float(col_dir[0]), 0.0),
+            (float(slice_dir[1]), float(row_dir[1]), float(col_dir[1]), 0.0),
+            (float(slice_dir[2]), float(row_dir[2]), float(col_dir[2]), 0.0),
+            (0.0, 0.0, 0.0, 1.0),
+        )
+    )
+    rot.translation = (
+        float(origin_mm[0]) / 1000.0,
+        float(origin_mm[1]) / 1000.0,
+        float(origin_mm[2]) / 1000.0,
+    )
+    obj.matrix_world = rot
+
+
+def align_object_to_ct_frame(
+    obj: bpy.types.Object,
+    ct_obj: bpy.types.Object,
+    origin_mm: Sequence[float],
+    basis_mm: Sequence[Sequence[float]],
+    spacing_mm: Sequence[float],
+) -> bool:
+    ct_basis_flat = ct_obj.get("medblend_ct_basis_mm")
+    if not ct_basis_flat or len(ct_basis_flat) != 9:
+        return False
+
+    try:
+        ct_basis = np.asarray(ct_basis_flat, dtype=float).reshape((3, 3))
+        ct_origin = np.asarray(ct_obj.get("medblend_ct_origin_mm", [0.0, 0.0, 0.0]), dtype=float)
+        ct_spacing = np.asarray(ct_obj.get("medblend_ct_spacing_mm", [1.0, 1.0, 1.0]), dtype=float)
+        source_origin = np.asarray(origin_mm, dtype=float)
+        source_basis = np.asarray(basis_mm, dtype=float).reshape((3, 3))
+        source_spacing = np.asarray(spacing_mm, dtype=float)
+        if np.any(source_spacing <= 0) or np.any(ct_spacing <= 0):
+            return False
+
+        patient_to_world = np.diag(ct_spacing / 1000.0) @ np.linalg.inv(ct_basis)
+        source_scale = np.diag(source_spacing / 1000.0)
+        linear = patient_to_world @ source_basis @ np.linalg.inv(source_scale)
+        translation = patient_to_world @ (source_origin - ct_origin)
+
+        matrix = Matrix(
+            (
+                (float(linear[0, 0]), float(linear[0, 1]), float(linear[0, 2]), 0.0),
+                (float(linear[1, 0]), float(linear[1, 1]), float(linear[1, 2]), 0.0),
+                (float(linear[2, 0]), float(linear[2, 1]), float(linear[2, 2]), 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+        )
+        matrix.translation = tuple(float(value) for value in translation)
+        obj.matrix_world = matrix
+    except Exception:
+        return False
+
+    return True
 
 
 def _import_volume_data_api(output_path: Path) -> bpy.types.Object:

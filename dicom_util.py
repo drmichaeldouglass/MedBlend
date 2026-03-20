@@ -39,7 +39,7 @@ def load_dicom_images(folder: Path) -> List[pydicom.Dataset]:
 
     images: List[pydicom.Dataset] = []
     for file_path in folder.iterdir():
-        if file_path.suffix.lower() != ".dcm":
+        if not file_path.is_file():
             continue
 
         try:
@@ -113,4 +113,3 @@ def filter_by_series_uid(images: Iterable[pydicom.Dataset], series_uid: str) -> 
     """Return the images that match the requested ``SeriesInstanceUID``."""
 
     return [image for image in images if getattr(image, "SeriesInstanceUID", None) == series_uid]
-

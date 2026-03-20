@@ -6,12 +6,11 @@ from pathlib import Path
 
 import bpy
 import pydicom
-from mathutils import Matrix
 
 from .dicom_util import is_dose_file
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
-from .volume_utils import write_vdb_volume
+from .volume_utils import align_object_to_ct_frame, set_object_patient_transform, write_vdb_volume
 
 
 def _find_ct_anchor(frame_uid: str):
@@ -21,24 +20,6 @@ def _find_ct_anchor(frame_uid: str):
     if not ct_candidates:
         return None
     return ct_candidates[-1]
-
-
-def _set_object_patient_transform(obj, origin_mm, slice_dir, row_dir, col_dir) -> None:
-    # Local VDB axes map to [slice, row, col] for arrays shaped [slice, row, col].
-    rot = Matrix(
-        (
-            (float(slice_dir[0]), float(row_dir[0]), float(col_dir[0]), 0.0),
-            (float(slice_dir[1]), float(row_dir[1]), float(col_dir[1]), 0.0),
-            (float(slice_dir[2]), float(row_dir[2]), float(col_dir[2]), 0.0),
-            (0.0, 0.0, 0.0, 1.0),
-        )
-    )
-    rot.translation = (
-        float(origin_mm[0]) / 1000.0,
-        float(origin_mm[1]) / 1000.0,
-        float(origin_mm[2]) / 1000.0,
-    )
-    obj.matrix_world = rot
 
 
 def load_dose(file_path: Path) -> bool:
@@ -114,22 +95,28 @@ def load_dose(file_path: Path) -> bool:
         row_axis_dir = col_dir
         col_axis_dir = row_dir
         slice_axis_dir = normal_dir * (1.0 if signed_slice_step >= 0 else -1.0)
+        dose_basis = np.column_stack(
+            (
+                slice_axis_dir * slice_spacing,
+                row_axis_dir * row_spacing,
+                col_axis_dir * col_spacing,
+            )
+        )
 
         # Align dose into the same scene frame used by imported CT data.
         frame_uid = str(getattr(dataset, "FrameOfReferenceUID", ""))
         ct_obj = _find_ct_anchor(frame_uid)
+        aligned = False
         if ct_obj:
-            ct_origin = np.asarray(ct_obj.get("medblend_ct_origin_mm", [0.0, 0.0, 0.0]), dtype=float)
-            ct_basis_flat = ct_obj.get("medblend_ct_basis_mm")
-            ct_spacing = ct_obj.get("medblend_ct_spacing_mm", [1.0, 1.0, 1.0])
-            if ct_basis_flat and len(ct_basis_flat) == 9:
-                ct_basis = np.asarray(ct_basis_flat, dtype=float).reshape((3, 3))
-                ct_basis_inv = np.linalg.inv(ct_basis)
-                delta_mm = dose_origin - ct_origin
-                t_world = np.diag(np.asarray(ct_spacing, dtype=float) / 1000.0) @ (ct_basis_inv @ delta_mm)
-                dose_object.location = (float(t_world[0]), float(t_world[1]), float(t_world[2]))
-        else:
-            _set_object_patient_transform(
+            aligned = align_object_to_ct_frame(
+                dose_object,
+                ct_obj,
+                dose_origin,
+                dose_basis,
+                dose_resolution,
+            )
+        if not aligned:
+            set_object_patient_transform(
                 dose_object,
                 dose_origin,
                 slice_axis_dir,

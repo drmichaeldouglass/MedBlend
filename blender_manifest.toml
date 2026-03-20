@@ -26,5 +26,4 @@ wheels = [
 ]
 
 [permissions]
-network = "Downloading structural data from the PDB and AFPDB"
-files = "Importing data files from disk and caching downloads"
+files = "Importing DICOM data from disk and caching temporary VDB files"

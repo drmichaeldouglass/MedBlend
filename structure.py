@@ -7,12 +7,11 @@ from pathlib import Path
 import bpy
 import numpy as np
 import pydicom
-from mathutils import Matrix
 
 from .dicom_util import check_dicom_image_type, is_structure_file
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
-from .volume_utils import write_vdb_volume
+from .volume_utils import align_object_to_ct_frame, set_object_patient_transform, write_vdb_volume
 
 
 def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.Dataset) -> list[pydicom.Dataset]:
@@ -40,10 +39,10 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
 
     image_slices: list[pydicom.Dataset] = []
     for file_path in directory_path.iterdir():
-        if not file_path.is_file() or file_path.suffix.lower() != ".dcm":
+        if not file_path.is_file():
             continue
         try:
-            ds = pydicom.dcmread(file_path, stop_before_pixels=False)
+            ds = pydicom.dcmread(file_path, stop_before_pixels=True)
         except Exception:
             continue
         if not check_dicom_image_type(ds):
@@ -125,6 +124,7 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
         "cols": cols,
         "num_slices": len(sorted_slices),
         "spacing": (slice_spacing, row_spacing, col_spacing),
+        "vdb_basis": np.column_stack((slice_axis, row_axis, col_axis)),
         "slice_axis_dir": slice_axis / np.linalg.norm(slice_axis),
         "row_axis_dir": row_axis / np.linalg.norm(row_axis),
         "col_axis_dir": col_axis / np.linalg.norm(col_axis),
@@ -252,6 +252,7 @@ def _build_geometry_from_contours(dicom_structure: pydicom.Dataset):
         "cols": cols,
         "num_slices": num_slices,
         "spacing": (slice_spacing, row_spacing, col_spacing),
+        "vdb_basis": np.column_stack((slice_axis, row_axis, col_axis)),
         "slice_axis_dir": slice_axis / np.linalg.norm(slice_axis),
         "row_axis_dir": row_axis / np.linalg.norm(row_axis),
         "col_axis_dir": col_axis / np.linalg.norm(col_axis),
@@ -278,23 +279,6 @@ def _find_ct_anchor(frame_uid: str):
     if not ct_candidates:
         return None
     return ct_candidates[-1]
-
-
-def _set_object_patient_transform(obj, origin_mm, slice_dir, row_dir, col_dir) -> None:
-    rot = Matrix(
-        (
-            (float(slice_dir[0]), float(row_dir[0]), float(col_dir[0]), 0.0),
-            (float(slice_dir[1]), float(row_dir[1]), float(col_dir[1]), 0.0),
-            (float(slice_dir[2]), float(row_dir[2]), float(col_dir[2]), 0.0),
-            (0.0, 0.0, 0.0, 1.0),
-        )
-    )
-    rot.translation = (
-        float(origin_mm[0]) / 1000.0,
-        float(origin_mm[1]) / 1000.0,
-        float(origin_mm[2]) / 1000.0,
-    )
-    obj.matrix_world = rot
 
 
 def _polygon_mask(shape: tuple[int, int], polygon_rc: np.ndarray) -> np.ndarray:
@@ -428,8 +412,17 @@ def load_structures(file_path: Path) -> bool:
         if not result:
             return False
         _output_path, imported_obj = result
-        if not ct_anchor:
-            _set_object_patient_transform(
+        aligned = False
+        if ct_anchor:
+            aligned = align_object_to_ct_frame(
+                imported_obj,
+                ct_anchor,
+                geometry["origin"],
+                geometry["vdb_basis"],
+                spacing,
+            )
+        if not aligned:
+            set_object_patient_transform(
                 imported_obj,
                 geometry["origin"],
                 geometry["slice_axis_dir"],
