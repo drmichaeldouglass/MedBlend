@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Iterable
 
 import bpy
 import pydicom
@@ -31,6 +32,16 @@ def is_photon_plan(ds: pydicom.Dataset) -> bool:
         return False
 
 
+def _as_float_list(values) -> list[float]:
+    if values is None:
+        return []
+    if isinstance(values, (str, bytes)):
+        return []
+    if isinstance(values, Iterable):
+        return [float(value) for value in values]
+    return [float(values)]
+
+
 def load_proton_plan(file_path: Path) -> bool:
     try:
         dataset = pydicom.dcmread(file_path)
@@ -48,7 +59,7 @@ def load_proton_plan(file_path: Path) -> bool:
         return False
 
     for beam_index, beam in enumerate(ion_beams):
-        control_points = beam.IonControlPointSequence
+        control_points = getattr(beam, "IonControlPointSequence", None)
         if not control_points:
             show_message_box(f"Beam {beam_index} has no control points.", "Error", "ERROR")
             continue
@@ -61,8 +72,9 @@ def load_proton_plan(file_path: Path) -> bool:
         spot_weights: list[float] = []
 
         for idx in range(0, num_control_points, 2):
-            positions = getattr(control_points[idx], "ScanSpotPositionMap", None)
-            weights = getattr(control_points[idx], "ScanSpotMetersetWeights", None)
+            control_point = control_points[idx]
+            positions = _as_float_list(getattr(control_point, "ScanSpotPositionMap", None))
+            weights = _as_float_list(getattr(control_point, "ScanSpotMetersetWeights", None))
             if not positions or not weights:
                 show_message_box(
                     f"Beam {beam_index} control point {idx} is missing spot positions or weights.",
@@ -77,27 +89,31 @@ def load_proton_plan(file_path: Path) -> bool:
                     "ERROR",
                 )
                 continue
-            for pos_index in range(0, len(positions), 2):
+
+            spot_count = len(positions) // 2
+            if len(weights) < spot_count:
+                show_message_box(
+                    f"Beam {beam_index} control point {idx} has fewer weights than positions.",
+                    "Error",
+                    "ERROR",
+                )
+                continue
+
+            nominal_energy = float(getattr(control_point, "NominalBeamEnergy", 0.0)) / 1000.0
+            for spot_index in range(spot_count):
+                pos_index = spot_index * 2
                 x_vals.append(positions[pos_index] / 1000.0)
                 y_vals.append(positions[pos_index + 1] / 1000.0)
-                weight_index = int(pos_index / 2)
-                if weight_index >= len(weights):
-                    show_message_box(
-                        f"Beam {beam_index} control point {idx} has fewer weights than positions.",
-                        "Error",
-                        "ERROR",
-                    )
-                    continue
-                energies.append(float(getattr(control_points[idx], "NominalBeamEnergy", 0.0)) / 1000.0)
-                spot_weights.append(weights[weight_index])
-
-        mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
-        data_fields = ["spot_x", "spot_y", "spot_E", "spot_weight"]
-        add_data_fields(mesh, data_fields)
+                energies.append(nominal_energy)
+                spot_weights.append(weights[spot_index])
 
         count = len(spot_weights)
         if count == 0:
             continue
+
+        mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
+        data_fields = ["spot_x", "spot_y", "spot_E", "spot_weight"]
+        add_data_fields(mesh, data_fields)
         mesh.vertices.add(count)
 
         for row in range(count):
