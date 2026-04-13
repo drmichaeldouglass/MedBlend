@@ -12,6 +12,7 @@ from .dicom_util import (
     extract_dicom_data,
     filter_by_series_uid,
     load_dicom_images,
+    rescale_dicom_image,
     sort_by_instance_number,
 )
 from .node_groups import apply_dicom_shader
@@ -52,6 +53,8 @@ def load_ct_series(file_path: Path) -> bool:
     except Exception as exc:
         show_message_box(str(exc), "Error", "ERROR")
         return False
+
+    ct_volume = rescale_dicom_image(ct_volume)
 
     slice_spacing = slice_spacing or 1.0
     spacing_values = (float(slice_spacing), float(spacing[0]), float(spacing[1]))
