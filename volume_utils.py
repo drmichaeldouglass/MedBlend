@@ -54,7 +54,12 @@ def resolve_temp_path(target_name: str, base_dir: Optional[Path] = None) -> Path
             "ERROR",
         )
         base_dir = _default_temp_base_dir()
-        base_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            base_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                f"Failed to create fallback VDB directory '{base_dir}': {fallback_exc}"
+            ) from fallback_exc
 
     return base_dir / target_name
 
