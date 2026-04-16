@@ -58,6 +58,8 @@ def load_proton_plan(file_path: Path) -> bool:
         show_message_box("RT Ion plan is missing IonBeamSequence.", "Error", "ERROR")
         return False
 
+    imported_beam_count = 0
+
     for beam_index, beam in enumerate(ion_beams):
         control_points = getattr(beam, "IonControlPointSequence", None)
         if not control_points:
@@ -109,6 +111,11 @@ def load_proton_plan(file_path: Path) -> bool:
 
         count = len(spot_weights)
         if count == 0:
+            show_message_box(
+                f"Beam {beam_index} did not contain any valid scan spot data.",
+                "Error",
+                "ERROR",
+            )
             continue
 
         mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
@@ -134,5 +141,14 @@ def load_proton_plan(file_path: Path) -> bool:
             obj.rotation_euler[1] = gantry_angle * math.pi / 180.0
             obj.location = (iso_center[0], iso_center[1], iso_center[2])
             apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots")
+            imported_beam_count += 1
+
+    if imported_beam_count == 0:
+        show_message_box(
+            "No proton beam spot data could be imported from this RT Ion plan.",
+            "Error",
+            "ERROR",
+        )
+        return False
 
     return True
