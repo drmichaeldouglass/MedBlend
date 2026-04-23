@@ -68,7 +68,12 @@ def load_dose(file_path: Path) -> bool:
 
     dose_resolution = [slice_spacing, row_spacing, col_spacing]
 
-    dose_matrix = np.asarray(pixel_data)
+    dose_matrix = np.asarray(pixel_data, dtype=float)
+    dose_grid_scaling = float(getattr(dataset, "DoseGridScaling", 1.0) or 1.0)
+    if dose_grid_scaling <= 0:
+        show_message_box("DoseGridScaling is invalid; expected a positive value.", "Error", "ERROR")
+        return False
+    dose_matrix *= dose_grid_scaling
     if dose_matrix.ndim == 2:
         dose_matrix = dose_matrix[np.newaxis, ...]
 

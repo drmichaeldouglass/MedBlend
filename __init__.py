@@ -27,8 +27,12 @@ def _add_bundled_wheels_to_sys_path() -> None:
     lib_dir.mkdir(exist_ok=True)
 
     for wheel in sorted(wheels_dir.glob("*.whl")):
+        marker = lib_dir / f".{wheel.stem}.extracted"
+        if marker.exists():
+            continue
         with zipfile.ZipFile(wheel) as zf:
             zf.extractall(lib_dir)
+        marker.touch()
 
     lib_path = str(lib_dir)
     if lib_path not in sys.path:
