@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import bpy
 import numpy as np
 import pydicom
 
 from .dicom_util import check_dicom_image_type, is_structure_file
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
-from .volume_utils import align_object_to_ct_frame, set_object_patient_transform, write_vdb_volume
+from .volume_utils import (
+    align_object_to_ct_frame,
+    find_ct_anchor,
+    set_object_patient_transform,
+    write_vdb_volume,
+)
 
 
 def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.Dataset) -> list[pydicom.Dataset]:
@@ -272,15 +276,6 @@ def _get_structure_frame_uid(dicom_structure: pydicom.Dataset) -> str:
     return ""
 
 
-def _find_ct_anchor(frame_uid: str):
-    ct_candidates = [obj for obj in bpy.data.objects if bool(obj.get("medblend_is_ct"))]
-    if frame_uid:
-        ct_candidates = [obj for obj in ct_candidates if obj.get("medblend_frame_of_reference_uid", "") == frame_uid]
-    if not ct_candidates:
-        return None
-    return ct_candidates[-1]
-
-
 def _polygon_mask(shape: tuple[int, int], polygon_rc: np.ndarray) -> np.ndarray:
     rows, cols = shape
     if polygon_rc.shape[0] < 3:
@@ -296,9 +291,11 @@ def _polygon_mask(shape: tuple[int, int], polygon_rc: np.ndarray) -> np.ndarray:
     if min_r > max_r or min_c > max_c:
         return np.zeros(shape, dtype=bool)
 
+    # Integer indices are voxel centres (ImagePositionPatient references the
+    # centre of the first voxel), so sample the polygon at integer coordinates.
     rr, cc = np.mgrid[min_r : max_r + 1, min_c : max_c + 1]
-    y = rr + 0.5
-    x = cc + 0.5
+    y = rr.astype(float)
+    x = cc.astype(float)
 
     inside = np.zeros_like(y, dtype=bool)
     y1 = poly_r
@@ -406,7 +403,7 @@ def load_structures(file_path: Path) -> bool:
 
     spacing = geometry["spacing"]
     frame_uid = _get_structure_frame_uid(dicom_structure)
-    ct_anchor = _find_ct_anchor(frame_uid)
+    ct_anchor = find_ct_anchor(frame_uid)
     for mask, name in zip(struct_masks, struct_names):
         result = write_vdb_volume(mask.astype(float), spacing, f"{name}.vdb")
         if not result:

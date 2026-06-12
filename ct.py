@@ -13,7 +13,7 @@ from .dicom_util import (
     filter_by_series_uid,
     load_dicom_images,
     rescale_dicom_image,
-    sort_by_instance_number,
+    sort_slices_spatially,
 )
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
@@ -38,7 +38,7 @@ def load_ct_series(file_path: Path) -> bool:
 
     images = load_dicom_images(file_path.parent)
     filtered_images = filter_by_series_uid(images, series_uid)
-    sorted_images = sort_by_instance_number(filtered_images)
+    sorted_images = sort_slices_spatially(filtered_images)
 
     try:
         (

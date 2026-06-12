@@ -4,22 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import bpy
 import pydicom
 
 from .dicom_util import is_dose_file
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
-from .volume_utils import align_object_to_ct_frame, set_object_patient_transform, write_vdb_volume
-
-
-def _find_ct_anchor(frame_uid: str):
-    ct_candidates = [obj for obj in bpy.data.objects if bool(obj.get("medblend_is_ct"))]
-    if frame_uid:
-        ct_candidates = [obj for obj in ct_candidates if obj.get("medblend_frame_of_reference_uid", "") == frame_uid]
-    if not ct_candidates:
-        return None
-    return ct_candidates[-1]
+from .volume_utils import (
+    align_object_to_ct_frame,
+    find_ct_anchor,
+    set_object_patient_transform,
+    write_vdb_volume,
+)
 
 
 def load_dose(file_path: Path) -> bool:
@@ -110,7 +105,7 @@ def load_dose(file_path: Path) -> bool:
 
         # Align dose into the same scene frame used by imported CT data.
         frame_uid = str(getattr(dataset, "FrameOfReferenceUID", ""))
-        ct_obj = _find_ct_anchor(frame_uid)
+        ct_obj = find_ct_anchor(frame_uid)
         aligned = False
         if ct_obj:
             aligned = align_object_to_ct_frame(
