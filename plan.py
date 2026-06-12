@@ -123,12 +123,13 @@ def load_proton_plan(file_path: Path) -> bool:
         add_data_fields(mesh, data_fields)
         mesh.vertices.add(count)
 
-        for row in range(count):
-            mesh.attributes["spot_x"].data[row].value = x_vals[row]
-            mesh.attributes["spot_y"].data[row].value = y_vals[row]
-            mesh.attributes["spot_E"].data[row].value = energies[row]
-            mesh.attributes["spot_weight"].data[row].value = spot_weights[row]
-            mesh.vertices[row].co = (0.01 * row, 0.0, 0.0)
+        mesh.attributes["spot_x"].data.foreach_set("value", x_vals)
+        mesh.attributes["spot_y"].data.foreach_set("value", y_vals)
+        mesh.attributes["spot_E"].data.foreach_set("value", energies)
+        mesh.attributes["spot_weight"].data.foreach_set("value", spot_weights)
+        coords = [0.0] * (count * 3)
+        coords[::3] = [0.01 * row for row in range(count)]
+        mesh.vertices.foreach_set("co", coords)
 
         mesh.update()
         mesh.validate()

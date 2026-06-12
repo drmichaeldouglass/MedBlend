@@ -38,6 +38,34 @@ def _get_vdb_temp_dir() -> Optional[Path]:
         return None
 
 
+def _sanitize_filename(name: str) -> str:
+    cleaned = "".join(char if (char.isalnum() or char in "._- ") else "_" for char in name)
+    cleaned = cleaned.strip(". ")
+    return cleaned or "volume"
+
+
+def _unique_path(base_dir: Path, target_name: str) -> Path:
+    """Return a path that does not overwrite an existing VDB file.
+
+    Blender volume objects read their data from disk, so overwriting a file
+    from a previous import would silently change the contents of volumes
+    already in the scene.
+    """
+
+    candidate = base_dir / target_name
+    if not candidate.exists():
+        return candidate
+
+    stem = candidate.stem
+    suffix = candidate.suffix
+    counter = 1
+    while True:
+        candidate = base_dir / f"{stem}_{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def resolve_temp_path(target_name: str, base_dir: Optional[Path] = None) -> Path:
     preferred_dir = _get_vdb_temp_dir()
     if preferred_dir:
@@ -61,7 +89,20 @@ def resolve_temp_path(target_name: str, base_dir: Optional[Path] = None) -> Path
                 f"Failed to create fallback VDB directory '{base_dir}': {fallback_exc}"
             ) from fallback_exc
 
-    return base_dir / target_name
+    return _unique_path(base_dir, _sanitize_filename(target_name))
+
+
+def find_ct_anchor(frame_uid: str) -> Optional[bpy.types.Object]:
+    """Return the most recently imported CT object matching ``frame_uid``."""
+
+    ct_candidates = [obj for obj in bpy.data.objects if bool(obj.get("medblend_is_ct"))]
+    if frame_uid:
+        ct_candidates = [
+            obj for obj in ct_candidates if obj.get("medblend_frame_of_reference_uid", "") == frame_uid
+        ]
+    if not ct_candidates:
+        return None
+    return ct_candidates[-1]
 
 
 def _link_object_to_context_collection(obj: bpy.types.Object) -> None:

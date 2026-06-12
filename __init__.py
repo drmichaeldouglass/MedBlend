@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
-from typing import Iterable
 import zipfile
 
 import bpy
-import bpy.utils.previews
 from bpy_extras.io_utils import ImportHelper
 
 
@@ -53,7 +51,12 @@ def _ensure_required_module_available(module_name: str) -> None:
     except ModuleNotFoundError:
         pass
 
-    _add_bundled_wheels_to_sys_path()
+    try:
+        _add_bundled_wheels_to_sys_path()
+    except OSError:
+        # The add-on directory may be read-only; fall through to the final
+        # import attempt in case Blender installed the wheel itself.
+        pass
 
     try:
         __import__(module_name)
@@ -64,7 +67,6 @@ def _ensure_required_module_available(module_name: str) -> None:
         ) from exc
 
 
-_add_bundled_wheels_to_sys_path()
 _ensure_required_module_available("pydicom")
 
 from .ct import load_ct_series
@@ -82,10 +84,6 @@ bl_info = {
     "description": "Import DICOM images, dose, structures, and proton plans",
     "category": "3D View",
 }
-
-
-addon_keymaps = {}
-_icons = None
 
 
 def _get_prefs(context) -> bpy.types.AddonPreferences | None:
@@ -115,7 +113,7 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "Medical"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         layout.label(text="Images")
         layout.operator("medblend.load_ct", text="Load DICOM Images", icon="FILEBROWSER")
@@ -127,7 +125,7 @@ class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
         layout.operator("medblend.load_proton", text="Load Proton Plan", icon="FILEBROWSER")
         layout.separator()
         layout.label(text="VDB Temp Directory")
-        prefs = _get_prefs(_context)
+        prefs = _get_prefs(context)
         if prefs:
             row = layout.row(align=True)
             row.prop(prefs, "vdb_temp_dir", text="")
@@ -221,7 +219,7 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
         return {"FINISHED"} if success else {"CANCELLED"}
 
 
-classes: Iterable[type] = (
+classes: tuple[type, ...] = (
     MEDBLEND_Preferences,
     SNA_PT_MEDBLEND_70A7C,
     MEDBLEND_OT_Select_Vdb_Temp_Dir,
@@ -234,16 +232,10 @@ classes: Iterable[type] = (
 
 
 def register():
-    global _icons
-    _icons = bpy.utils.previews.new()
     for cls in classes:
         bpy.utils.register_class(cls)
 
 
 def unregister():
-    global _icons
-    if _icons is not None:
-        bpy.utils.previews.remove(_icons)
-        _icons = None
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
