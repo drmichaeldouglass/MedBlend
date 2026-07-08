@@ -86,12 +86,14 @@ Once installed, open the 3D viewport and select the Medical category from the si
 
 If Blender cannot write temporary VDB files in its default temp location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 
+> **Note on saving .blend files:** Blender volume objects read their voxel data from the VDB file on disk. By default MedBlend writes VDB files to Blender's session temporary directory, which is deleted when Blender exits — so a saved .blend file will lose its volume data on the next reload. If you plan to save your scene, set a persistent `VDB Temp Directory` in the MedBlend preferences first. Files in that directory are never overwritten or cleaned up automatically (each import writes a new uniquely-named file), so clear it out occasionally.
+
 <img width="393" height="349" alt="Screenshot 2026-03-08 at 9 17 49 pm" src="https://github.com/user-attachments/assets/d000dc5a-3752-46c7-a758-292e3ed7b100" />
 
 
 MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
 
--Load DICOM Images, will allow you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images with the same study ID into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. 
+-Load DICOM Images, will allow you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. 
 
 -Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. 
 
@@ -152,7 +154,8 @@ A test proton therapy plan on a phantom. The CT images, dose distribution and pr
 
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
-- CT, Dose and Structure locations are not perfectly co-registered yet (user may need to manually align them at the moment).
+- Imported CT, dose, structure, and proton spot objects are now all placed in the DICOM patient coordinate system (millimetres mapped to metres), so they co-register automatically regardless of import order. Note that the CT volume is therefore no longer centred at the world origin.
+- Proton beam orientation (gantry and couch rotation) assumes a head-first supine (HFS) patient; other patient orientations have not been verified and a warning is shown when the plan reports a different patient position.
 - If bundled dependencies were missing from the installed package, MedBlend will fail to load. Reinstall using the official release zip and ensure the `wheels/` directory is included.
 
 Please report any bugs as an issue on this repository

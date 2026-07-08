@@ -10,14 +10,13 @@ import pydicom
 from .dicom_util import (
     check_dicom_image_type,
     extract_dicom_data,
-    filter_by_series_uid,
-    load_dicom_images,
+    load_dicom_series,
     rescale_dicom_image,
     sort_slices_spatially,
 )
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
-from .volume_utils import write_vdb_volume
+from .volume_utils import set_object_patient_transform, write_vdb_volume
 
 
 def load_ct_series(file_path: Path) -> bool:
@@ -36,19 +35,17 @@ def load_ct_series(file_path: Path) -> bool:
         show_message_box("Missing SeriesInstanceUID on selected DICOM.", "Error", "ERROR")
         return False
 
-    images = load_dicom_images(file_path.parent)
-    filtered_images = filter_by_series_uid(images, series_uid)
-    sorted_images = sort_slices_spatially(filtered_images)
+    images = load_dicom_series(file_path.parent, series_uid)
+    sorted_images = sort_slices_spatially(images)
 
     try:
         (
             ct_volume,
             spacing,
-            _slice_position,
+            slice_positions_raw,
             slice_spacing,
-            _image_origin,
-            _image_orientation,
-            _image_columns,
+            image_origin,
+            image_orientation,
         ) = extract_dicom_data(sorted_images)
     except Exception as exc:
         show_message_box(str(exc), "Error", "ERROR")
@@ -65,7 +62,7 @@ def load_ct_series(file_path: Path) -> bool:
     _output_path, ct_object = result
 
     try:
-        orientation = np.asarray(_image_orientation, dtype=float)
+        orientation = np.asarray(image_orientation, dtype=float)
         row_dir = orientation[:3]
         col_dir = orientation[3:]
         normal_dir = np.cross(row_dir, col_dir)
@@ -77,11 +74,11 @@ def load_ct_series(file_path: Path) -> bool:
 
         # Array axis 0 is flipped in extract_dicom_data, so the imported array origin
         # corresponds to the final source slice position.
-        slice_positions = np.asarray(_slice_position, dtype=float)
+        slice_positions = np.asarray(slice_positions_raw, dtype=float)
         if slice_positions.ndim == 2 and slice_positions.shape[1] == 3 and len(slice_positions) > 0:
             array_origin = slice_positions[-1]
         else:
-            array_origin = np.asarray(_image_origin, dtype=float)
+            array_origin = np.asarray(image_origin, dtype=float)
 
         row_spacing = float(spacing[0])
         col_spacing = float(spacing[1])
@@ -100,6 +97,20 @@ def load_ct_series(file_path: Path) -> bool:
         ct_object["medblend_ct_origin_mm"] = [float(v) for v in array_origin]
         ct_object["medblend_ct_basis_mm"] = [float(v) for v in basis.reshape(-1)]
         ct_object["medblend_ct_spacing_mm"] = [float(v) for v in spacing_values]
+
+        # Place the CT in DICOM patient coordinates (mm -> m) so dose,
+        # structures, and proton plans land in the same frame regardless of
+        # import order.
+        row_norm = float(np.linalg.norm(row_dir))
+        col_norm = float(np.linalg.norm(col_dir))
+        if row_norm > 0 and col_norm > 0 and normal_norm > 0:
+            set_object_patient_transform(
+                ct_object,
+                array_origin,
+                -normal_dir,
+                col_dir / col_norm,
+                row_dir / row_norm,
+            )
     except Exception:
         # Metadata is best-effort and should not block import.
         pass

@@ -96,7 +96,11 @@ class MEDBLEND_Preferences(bpy.types.AddonPreferences):
 
     vdb_temp_dir: bpy.props.StringProperty(
         name="VDB Temp Directory",
-        description="Directory to store temporary VDB files",
+        description=(
+            "Directory to store generated VDB files. If empty, Blender's session "
+            "temporary directory is used, which is deleted when Blender exits - "
+            "volumes in saved .blend files will then lose their data on reload"
+        ),
         subtype="DIR_PATH",
         default="",
     )

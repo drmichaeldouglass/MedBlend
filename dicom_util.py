@@ -36,22 +36,34 @@ def check_dicom_image_type(ds: pydicom.Dataset) -> bool:
         return False
 
 
-def load_dicom_images(folder: Path) -> List[pydicom.Dataset]:
-    """Load all CT/MR DICOM files within ``folder``."""
+def load_dicom_series(folder: Path, series_uid: str) -> List[pydicom.Dataset]:
+    """Load the CT/MR files in ``folder`` that belong to ``series_uid``.
 
-    images: List[pydicom.Dataset] = []
-    for file_path in folder.iterdir():
+    Scans headers only (``stop_before_pixels``) first, so pixel data is read
+    and decoded just for the slices of the requested series rather than for
+    every file in the directory.
+    """
+
+    matching_paths: List[Path] = []
+    for file_path in sorted(folder.iterdir()):
         if not file_path.is_file():
             continue
-
         try:
-            image = pydicom.dcmread(file_path)
+            header = pydicom.dcmread(file_path, stop_before_pixels=True)
         except Exception:
             continue
+        if not check_dicom_image_type(header):
+            continue
+        if getattr(header, "SeriesInstanceUID", None) != series_uid:
+            continue
+        matching_paths.append(file_path)
 
-        if image and check_dicom_image_type(image):
-            images.append(image)
-
+    images: List[pydicom.Dataset] = []
+    for file_path in matching_paths:
+        try:
+            images.append(pydicom.dcmread(file_path))
+        except Exception:
+            continue
     return images
 
 
@@ -151,9 +163,16 @@ def _compute_slice_spacing(
     return spacing if spacing > 0 else 1.0
 
 
+def _float_or(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def extract_dicom_data(
     images: Sequence[pydicom.Dataset],
-) -> Tuple[np.ndarray, Sequence[float], Sequence[float], float, Sequence[float], Sequence[float], int]:
+) -> Tuple[np.ndarray, Sequence[float], Sequence[float], float, Sequence[float], Sequence[float]]:
     """Extract voxel data and metadata from the provided DICOM slices."""
 
     if not images:
@@ -162,7 +181,14 @@ def extract_dicom_data(
     dicom_3d_array = []
     slice_positions = []
     for dataset in images:
-        dicom_3d_array.append(dataset.pixel_array)
+        pixels = np.asarray(dataset.pixel_array, dtype=np.float32)
+        # Apply the modality LUT per slice: RescaleSlope/Intercept may differ
+        # between slices, in which case raw stored values are not comparable.
+        slope = _float_or(getattr(dataset, "RescaleSlope", 1.0), 1.0)
+        intercept = _float_or(getattr(dataset, "RescaleIntercept", 0.0), 0.0)
+        if slope != 1.0 or intercept != 0.0:
+            pixels = pixels * slope + intercept
+        dicom_3d_array.append(pixels)
         slice_positions.append(getattr(dataset, "ImagePositionPatient", (0.0, 0.0, 0.0)))
 
     array = np.asarray(dicom_3d_array)
@@ -172,7 +198,6 @@ def extract_dicom_data(
     spacing = getattr(first, "PixelSpacing", (1.0, 1.0))
     image_origin = getattr(first, "ImagePositionPatient", (0.0, 0.0, 0.0))
     image_orientation = getattr(first, "ImageOrientationPatient", (0.0,) * 6)
-    image_columns = getattr(first, "Columns", 0)
     slice_spacing = _compute_slice_spacing(
         slice_positions,
         image_orientation,
@@ -186,11 +211,4 @@ def extract_dicom_data(
         slice_spacing,
         image_origin,
         image_orientation,
-        image_columns,
     )
-
-
-def filter_by_series_uid(images: Iterable[pydicom.Dataset], series_uid: str) -> List[pydicom.Dataset]:
-    """Return the images that match the requested ``SeriesInstanceUID``."""
-
-    return [image for image in images if getattr(image, "SeriesInstanceUID", None) == series_uid]

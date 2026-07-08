@@ -1,4 +1,4 @@
-"""Plan import helpers for proton and photon data."""
+"""Proton (RT Ion) plan import helpers."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Iterable
 
 import bpy
 import pydicom
+from mathutils import Matrix
 
 from .blender_utils import add_data_fields, create_object
 from .node_groups import apply_proton_spots_geo_nodes
@@ -23,15 +24,6 @@ def is_proton_plan(ds: pydicom.Dataset) -> bool:
         return False
 
 
-def is_photon_plan(ds: pydicom.Dataset) -> bool:
-    """Return ``True`` when the dataset represents an RT Photon plan."""
-
-    try:
-        return str(ds.Modality).upper() == "RTPLAN"
-    except Exception:
-        return False
-
-
 def _as_float_list(values) -> list[float]:
     if values is None:
         return []
@@ -40,6 +32,36 @@ def _as_float_list(values) -> list[float]:
     if isinstance(values, Iterable):
         return [float(value) for value in values]
     return [float(values)]
+
+
+def _patient_position(dataset: pydicom.Dataset) -> str:
+    try:
+        setups = getattr(dataset, "PatientSetupSequence", [])
+        if setups:
+            return str(getattr(setups[0], "PatientPosition", "")).upper()
+    except Exception:
+        pass
+    return ""
+
+
+def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
+    """Build the beam object's world matrix in DICOM patient coordinates.
+
+    Assumes a head-first supine (HFS) patient: the IEC gantry rotation axis is
+    the patient superior-inferior axis (DICOM +Z), and the couch
+    (PatientSupportAngle) rotates the beam about the room-vertical axis, which
+    maps to the patient +Y axis in this convention.
+    """
+
+    gantry_angle = float(getattr(control_point, "GantryAngle", 0.0) or 0.0)
+    couch_angle = float(getattr(control_point, "PatientSupportAngle", 0.0) or 0.0)
+    iso_center_raw = getattr(control_point, "IsocenterPosition", (0.0, 0.0, 0.0))
+    iso_center = tuple(float(val) / 1000.0 for val in iso_center_raw)
+
+    rotation = Matrix.Rotation(math.radians(couch_angle), 4, "Y") @ Matrix.Rotation(
+        math.radians(gantry_angle), 4, "Z"
+    )
+    return Matrix.Translation(iso_center) @ rotation
 
 
 def load_proton_plan(file_path: Path) -> bool:
@@ -58,12 +80,19 @@ def load_proton_plan(file_path: Path) -> bool:
         show_message_box("RT Ion plan is missing IonBeamSequence.", "Error", "ERROR")
         return False
 
+    warnings: list[str] = []
+    patient_position = _patient_position(dataset)
+    if patient_position and patient_position != "HFS":
+        warnings.append(
+            f"Patient position is {patient_position}; beam orientation assumes HFS."
+        )
+
     imported_beam_count = 0
 
     for beam_index, beam in enumerate(ion_beams):
         control_points = getattr(beam, "IonControlPointSequence", None)
         if not control_points:
-            show_message_box(f"Beam {beam_index} has no control points.", "Error", "ERROR")
+            warnings.append(f"Beam {beam_index} has no control points.")
             continue
 
         num_control_points = len(control_points)
@@ -73,35 +102,31 @@ def load_proton_plan(file_path: Path) -> bool:
         energies: list[float] = []
         spot_weights: list[float] = []
 
+        # Spot data lives on the first control point of each pair; the second
+        # of a pair only carries cumulative meterset bookkeeping.
         for idx in range(0, num_control_points, 2):
             control_point = control_points[idx]
             positions = _as_float_list(getattr(control_point, "ScanSpotPositionMap", None))
             weights = _as_float_list(getattr(control_point, "ScanSpotMetersetWeights", None))
             if not positions or not weights:
-                show_message_box(
-                    f"Beam {beam_index} control point {idx} is missing spot positions or weights.",
-                    "Error",
-                    "ERROR",
+                warnings.append(
+                    f"Beam {beam_index} control point {idx} is missing spot positions or weights."
                 )
                 continue
             if len(positions) % 2 != 0:
-                show_message_box(
-                    f"Beam {beam_index} control point {idx} has an odd number of spot positions.",
-                    "Error",
-                    "ERROR",
+                warnings.append(
+                    f"Beam {beam_index} control point {idx} has an odd number of spot positions."
                 )
                 continue
 
             spot_count = len(positions) // 2
             if len(weights) < spot_count:
-                show_message_box(
-                    f"Beam {beam_index} control point {idx} has fewer weights than positions.",
-                    "Error",
-                    "ERROR",
+                warnings.append(
+                    f"Beam {beam_index} control point {idx} has fewer weights than positions."
                 )
                 continue
 
-            nominal_energy = float(getattr(control_point, "NominalBeamEnergy", 0.0)) / 1000.0
+            nominal_energy = float(getattr(control_point, "NominalBeamEnergy", 0.0) or 0.0) / 1000.0
             for spot_index in range(spot_count):
                 pos_index = spot_index * 2
                 x_vals.append(positions[pos_index] / 1000.0)
@@ -111,11 +136,7 @@ def load_proton_plan(file_path: Path) -> bool:
 
         count = len(spot_weights)
         if count == 0:
-            show_message_box(
-                f"Beam {beam_index} did not contain any valid scan spot data.",
-                "Error",
-                "ERROR",
-            )
+            warnings.append(f"Beam {beam_index} did not contain any valid scan spot data.")
             continue
 
         mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
@@ -136,11 +157,7 @@ def load_proton_plan(file_path: Path) -> bool:
 
         if mesh.vertices:
             obj = create_object(mesh, mesh.name)
-            gantry_angle = float(getattr(control_points[0], "GantryAngle", 0.0))
-            iso_center_raw = getattr(control_points[0], "IsocenterPosition", (0.0, 0.0, 0.0))
-            iso_center = tuple(val / 1000.0 for val in iso_center_raw)
-            obj.rotation_euler[1] = gantry_angle * math.pi / 180.0
-            obj.location = (iso_center[0], iso_center[1], iso_center[2])
+            obj.matrix_world = _beam_world_matrix(control_points[0])
             apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots")
             imported_beam_count += 1
 
@@ -151,5 +168,15 @@ def load_proton_plan(file_path: Path) -> bool:
             "ERROR",
         )
         return False
+
+    if warnings:
+        preview = "; ".join(warnings[:3])
+        if len(warnings) > 3:
+            preview += f"; and {len(warnings) - 3} more"
+        show_message_box(
+            f"Imported {imported_beam_count} beam(s) with {len(warnings)} warning(s): {preview}",
+            "Proton Import Warnings",
+            "ERROR",
+        )
 
     return True

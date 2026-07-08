@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pydicom
 
 from .dicom_util import is_dose_file
@@ -26,12 +27,6 @@ def load_dose(file_path: Path) -> bool:
 
     if not is_dose_file(dataset):
         show_message_box("Selected file is not an RT Dose file.", "Error", "ERROR")
-        return False
-
-    try:
-        import numpy as np
-    except Exception as exc:
-        show_message_box(f"numpy is required to load dose data: {exc}", "Missing Dependency", "ERROR")
         return False
 
     try:
