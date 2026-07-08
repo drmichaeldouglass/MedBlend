@@ -322,7 +322,22 @@ def _contour_points_to_ijk(points_xyz: np.ndarray, origin: np.ndarray, inv_basis
     return (inv_basis @ diffs.T).T
 
 
-def _rtstruct_to_masks(dicom_structure: pydicom.Dataset, geometry) -> tuple[list[np.ndarray], list[str]]:
+def _roi_display_color(roi_contour: pydicom.Dataset) -> tuple[float, float, float, float] | None:
+    display_color = getattr(roi_contour, "ROIDisplayColor", None)
+    if display_color is None:
+        return None
+    try:
+        values = [float(component) for component in display_color]
+    except (TypeError, ValueError):
+        return None
+    if len(values) < 3:
+        return None
+    return (values[0] / 255.0, values[1] / 255.0, values[2] / 255.0, 1.0)
+
+
+def _rtstruct_to_masks(
+    dicom_structure: pydicom.Dataset, geometry
+) -> tuple[list[np.ndarray], list[str], list[tuple[float, float, float, float] | None]]:
     roi_names = {}
     for roi in getattr(dicom_structure, "StructureSetROISequence", []):
         roi_number = int(getattr(roi, "ROINumber", -1))
@@ -337,6 +352,7 @@ def _rtstruct_to_masks(dicom_structure: pydicom.Dataset, geometry) -> tuple[list
 
     struct_masks: list[np.ndarray] = []
     struct_names: list[str] = []
+    struct_colors: list[tuple[float, float, float, float] | None] = []
 
     for roi_contour in getattr(dicom_structure, "ROIContourSequence", []):
         roi_number = int(getattr(roi_contour, "ReferencedROINumber", -1))
@@ -344,8 +360,13 @@ def _rtstruct_to_masks(dicom_structure: pydicom.Dataset, geometry) -> tuple[list
         volume_mask = np.zeros((num_slices, rows, cols), dtype=bool)
 
         for contour in getattr(roi_contour, "ContourSequence", []):
+            # Only closed planar contours describe filled regions; open
+            # contours and single points must not be rasterized as polygons.
+            geometric_type = str(getattr(contour, "ContourGeometricType", "CLOSED_PLANAR")).upper()
+            if geometric_type not in {"CLOSED_PLANAR", "CLOSEDPLANAR_XOR"}:
+                continue
             contour_data = getattr(contour, "ContourData", None)
-            if not contour_data or len(contour_data) < 9:
+            if not contour_data or len(contour_data) < 9 or len(contour_data) % 3 != 0:
                 continue
 
             points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
@@ -364,8 +385,9 @@ def _rtstruct_to_masks(dicom_structure: pydicom.Dataset, geometry) -> tuple[list
         if np.any(volume_mask):
             struct_masks.append(volume_mask.astype(float))
             struct_names.append(roi_name)
+            struct_colors.append(_roi_display_color(roi_contour))
 
-    return struct_masks, struct_names
+    return struct_masks, struct_names, struct_colors
 
 
 def load_structures(file_path: Path) -> bool:
@@ -388,7 +410,7 @@ def load_structures(file_path: Path) -> bool:
             geometry = _build_geometry(image_slices)
         else:
             geometry = _build_geometry_from_contours(dicom_structure)
-        struct_masks, struct_names = _rtstruct_to_masks(dicom_structure, geometry)
+        struct_masks, struct_names, struct_colors = _rtstruct_to_masks(dicom_structure, geometry)
     except Exception as exc:
         show_message_box(
             f"Unable to convert RT Structure contours: {exc}",
@@ -404,11 +426,13 @@ def load_structures(file_path: Path) -> bool:
     spacing = geometry["spacing"]
     frame_uid = _get_structure_frame_uid(dicom_structure)
     ct_anchor = find_ct_anchor(frame_uid)
-    for mask, name in zip(struct_masks, struct_names):
-        result = write_vdb_volume(mask.astype(float), spacing, f"{name}.vdb")
+    for mask, name, color in zip(struct_masks, struct_names, struct_colors):
+        result = write_vdb_volume(mask, spacing, f"{name}.vdb")
         if not result:
             return False
         _output_path, imported_obj = result
+        if color:
+            imported_obj.color = color
         aligned = False
         if ct_anchor:
             aligned = align_object_to_ct_frame(

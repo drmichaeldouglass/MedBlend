@@ -66,12 +66,8 @@ def _unique_path(base_dir: Path, target_name: str) -> Path:
         counter += 1
 
 
-def resolve_temp_path(target_name: str, base_dir: Optional[Path] = None) -> Path:
-    preferred_dir = _get_vdb_temp_dir()
-    if preferred_dir:
-        base_dir = preferred_dir
-    else:
-        base_dir = Path(base_dir) if base_dir else _default_temp_base_dir()
+def resolve_temp_path(target_name: str) -> Path:
+    base_dir = _get_vdb_temp_dir() or _default_temp_base_dir()
 
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -170,7 +166,10 @@ def align_object_to_ct_frame(
             )
         )
         matrix.translation = tuple(float(value) for value in translation)
-        obj.matrix_world = matrix
+        # ``matrix`` maps the new object into the CT object's local frame, so
+        # compose with the CT's current world matrix. This keeps alignment
+        # correct even when the user has moved/rotated/scaled the CT object.
+        obj.matrix_world = ct_obj.matrix_world @ matrix
     except Exception:
         return False
 
@@ -227,7 +226,6 @@ def write_vdb_volume(
     array,
     spacing: Sequence[float],
     target_name: str,
-    dicom_dir: Optional[Path] = None,
 ) -> Optional[Tuple[Path, bpy.types.Object]]:
     if len(spacing) != 3:
         show_message_box(
@@ -252,7 +250,9 @@ def write_vdb_volume(
 
     try:
         grid = openvdb.FloatGrid()
-        grid.copyFromArray(array.astype(float))
+        # FloatGrid stores single precision; converting up front halves peak
+        # memory and avoids dtype-strict copyFromArray builds rejecting float64.
+        grid.copyFromArray(np.ascontiguousarray(array, dtype=np.float32))
         grid.transform = openvdb.createLinearTransform(
             [
                 [spacing[0] / 1000.0, 0, 0, 0],
@@ -264,7 +264,7 @@ def write_vdb_volume(
         grid.gridClass = openvdb.GridClass.FOG_VOLUME
         grid.name = "density"
 
-        output_path = resolve_temp_path(target_name, dicom_dir)
+        output_path = resolve_temp_path(target_name)
         openvdb.write(str(output_path), grid)
 
         try:
