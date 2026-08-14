@@ -10,13 +10,14 @@ from MedBlend.structure import (
     _build_geometry,
     _build_geometry_from_contours,
     _get_structure_frame_uid,
+    _load_reference_image_slices,
     _polygon_mask,
     _roi_display_color,
     crop_mask_to_bounds,
     iter_roi_masks,
 )
 
-from helpers import make_slice
+from helpers import make_slice, write_slice
 
 
 def build_reference_geometry(num_slices: int = 6, size: int = 16, spacing: float = 2.0):
@@ -61,6 +62,48 @@ class TestPolygonMask:
 
     def test_degenerate_polygon_is_empty(self):
         assert not _polygon_mask((8, 8), np.array([[1.0, 1.0], [2.0, 2.0]])).any()
+
+    def test_horizontal_only_polygon_is_empty(self):
+        # Every edge lies along a scanline, so nothing can be crossed.
+        flat = np.array([[3.0, 1.0], [3.0, 5.0], [3.0, 9.0]])
+        assert not _polygon_mask((8, 12), flat).any()
+
+    def test_concave_polygon_excludes_the_notch(self):
+        # A "C" shape: parity filling must leave the notch empty.
+        notched = np.array(
+            [[1.0, 1.0], [1.0, 8.0], [3.0, 8.0], [3.0, 3.0], [6.0, 3.0], [6.0, 8.0], [8.0, 8.0], [8.0, 1.0]]
+        )
+        mask = _polygon_mask((10, 10), notched)
+        assert mask[2, 5] and mask[7, 5] and mask[4, 2]
+        assert not mask[4, 6] and not mask[5, 7]
+
+    def test_matches_a_brute_force_even_odd_reference(self):
+        """The fast scanline fill must agree with the naive per-edge test."""
+
+        def reference(shape, polygon):
+            rows, cols = shape
+            poly_r, poly_c = polygon[:, 0], polygon[:, 1]
+            out = np.zeros(shape, dtype=bool)
+            for r in range(rows):
+                for c in range(cols):
+                    inside = False
+                    for i in range(len(poly_r)):
+                        yi, yj = poly_r[i], poly_r[(i + 1) % len(poly_r)]
+                        xi, xj = poly_c[i], poly_c[(i + 1) % len(poly_c)]
+                        if yi == yj:
+                            continue
+                        if ((yi > r) != (yj > r)) and c < (xj - xi) * (r - yi) / (yj - yi) + xi:
+                            inside = not inside
+                    out[r, c] = inside
+            return out
+
+        rng = np.random.default_rng(2024)
+        for trial in range(60):
+            polygon = rng.uniform(-4.0, 18.0, size=(int(rng.integers(3, 12)), 2))
+            if trial % 3 == 0:
+                # Vertices exactly on voxel centres are the boundary-rule worst case.
+                polygon = np.round(polygon)
+            assert np.array_equal(_polygon_mask((14, 14), polygon), reference((14, 14), polygon))
 
 
 class TestCropMaskToBounds:
@@ -203,6 +246,29 @@ class TestIterRoiMasks:
         result = iter_roi_masks(make_structure_set(), build_reference_geometry())
         assert hasattr(result, "__next__")
 
+    @pytest.mark.parametrize("empty_value", [None, ""])
+    def test_empty_geometric_type_defaults_to_closed_planar(self, empty_value):
+        # ContourGeometricType is Type 1 but exports do leave it empty. Treating
+        # the resulting None as a type name dropped the whole ROI in silence.
+        structure = make_structure_set()
+        for contour in structure.ROIContourSequence[0].ContourSequence:
+            contour.ContourGeometricType = empty_value
+
+        _name, mask, _color, skipped = next(iter(iter_roi_masks(structure, build_reference_geometry())))
+        _name, baseline, _color, _skipped = next(
+            iter(iter_roi_masks(make_structure_set(), build_reference_geometry()))
+        )
+        assert mask is not None
+        assert np.array_equal(mask, baseline)
+        assert skipped == 0
+
+    def test_padded_geometric_type_is_accepted(self):
+        structure = make_structure_set()
+        for contour in structure.ROIContourSequence[0].ContourSequence:
+            contour.ContourGeometricType = " closed_planar "
+        _name, mask, _color, _skipped = next(iter(iter_roi_masks(structure, build_reference_geometry())))
+        assert mask is not None and mask.any()
+
 
 class TestGeometryFallbacks:
     def test_contour_only_geometry_covers_all_points(self):
@@ -235,6 +301,42 @@ class TestGeometryFallbacks:
         only.SliceThickness = None
         geometry = _build_geometry([only])
         assert geometry["spacing"][0] == pytest.approx(1.0)
+
+
+class TestLoadReferenceImageSlices:
+    def _write_series(self, folder, names, z_values=(0.0, 3.0, 6.0, 9.0)):
+        for index, z in enumerate(z_values):
+            for name in names:
+                write_slice(folder, make_slice(z, rows=8, cols=8, instance=index), name.format(index))
+
+    def test_duplicate_files_are_counted_once(self, tmp_path):
+        # A duplicated export ("IMG1.dcm" and "IMG1 (1).dcm") must not deepen
+        # the mask grid - every ROI allocates num_slices x rows x cols.
+        self._write_series(tmp_path, ["img{}.dcm", "img{} (1).dcm"])
+        slices = _load_reference_image_slices(tmp_path, make_structure_set())
+        assert len(slices) == 4
+        assert _build_geometry(slices)["num_slices"] == 4
+
+    def test_distinct_slices_are_all_kept(self, tmp_path):
+        self._write_series(tmp_path, ["img{}.dcm"])
+        assert len(_load_reference_image_slices(tmp_path, make_structure_set())) == 4
+
+    def test_other_series_are_ignored(self, tmp_path):
+        self._write_series(tmp_path, ["img{}.dcm"])
+        stray = make_slice(0.0, rows=8, cols=8, instance=99, series_uid="9.9.9")
+        write_slice(tmp_path, stray, "other.dcm")
+
+        structure = make_structure_set()
+        series_ref = Dataset()
+        series_ref.SeriesInstanceUID = "1.2.3"
+        study_ref = Dataset()
+        study_ref.RTReferencedSeriesSequence = [series_ref]
+        frame_ref = Dataset()
+        frame_ref.RTReferencedStudySequence = [study_ref]
+        structure.ReferencedFrameOfReferenceSequence = [frame_ref]
+
+        slices = _load_reference_image_slices(tmp_path, structure)
+        assert {str(ds.SeriesInstanceUID) for ds in slices} == {"1.2.3"}
 
 
 class TestStructureMetadata:
