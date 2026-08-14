@@ -10,7 +10,6 @@ permissions:
 
 env:
   BLENDER_VERSION: "5.2.0"
-  BLENDER_DIR: ${{ runner.temp }}/blender-5.2.0-linux-x64
 
 jobs:
   package:
@@ -24,7 +23,7 @@ jobs:
         id: blender-cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.BLENDER_DIR }}
+          path: ${{ runner.temp }}/blender-5.2.0-linux-x64
           key: blender-${{ env.BLENDER_VERSION }}-linux-x64
 
       - name: Download Blender
@@ -42,19 +41,19 @@ jobs:
 
       - name: Validate extension source
         run: |
-          "$BLENDER_DIR/blender" --command extension validate .
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension validate .
 
       - name: Build extension
         run: |
           mkdir -p dist
-          "$BLENDER_DIR/blender" --command extension build --source-dir . --output-dir dist
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension build --source-dir . --output-dir dist
 
       - name: Validate built archive
         run: |
           shopt -s nullglob
           packages=(dist/*.zip)
           test "${#packages[@]}" -eq 1
-          "$BLENDER_DIR/blender" --command extension validate "${packages[0]}"
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension validate "${packages[0]}"
 
       - name: Upload zip to release
         uses: softprops/action-gh-release@v2
