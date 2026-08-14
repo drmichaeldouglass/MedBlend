@@ -1,0 +1,111 @@
+name: Extension package
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+env:
+  BLENDER_VERSION: "5.2.0"
+  BLENDER_DIR: ${{ runner.temp }}/blender-5.2.0-linux-x64
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Cache Blender
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BLENDER_DIR }}
+          key: blender-${{ env.BLENDER_VERSION }}-linux-x64
+
+      - name: Download Blender
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          ARCHIVE="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          BASE_URL="https://download.blender.org/release/Blender5.2"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/$ARCHIVE" "$BASE_URL/$ARCHIVE"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/blender.sha256" "$BASE_URL/blender-${BLENDER_VERSION}.sha256"
+          (
+            cd "$RUNNER_TEMP"
+            grep " $ARCHIVE$" blender.sha256 | sha256sum --check
+            tar -xJf "$ARCHIVE"
+          )
+
+      - name: Validate extension source
+        run: "$BLENDER_DIR/blender" --command extension validate .
+
+      - name: Build extension with Blender
+        run: |
+          mkdir -p dist
+          "$BLENDER_DIR/blender" --command extension build --source-dir . --output-dir dist
+
+      - name: Validate built archive
+        run: |
+          shopt -s nullglob
+          packages=(dist/*.zip)
+          test "${#packages[@]}" -eq 1
+          "$BLENDER_DIR/blender" --command extension validate "${packages[0]}"
+
+      - name: Audit archive contents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tomllib
+          import zipfile
+
+          packages = list(Path("dist").glob("*.zip"))
+          if len(packages) != 1:
+              raise SystemExit(f"Expected one extension archive, found {len(packages)}")
+
+          with zipfile.ZipFile(packages[0]) as archive:
+              names = set(archive.namelist())
+              required = {
+                  "__init__.py",
+                  "blender_manifest.toml",
+                  "LICENSE",
+                  "THIRD_PARTY_NOTICES.md",
+                  "wheels/pydicom-3.0.1-py3-none-any.whl",
+              }
+              missing = sorted(required - names)
+              if missing:
+                  raise SystemExit(f"Archive is missing required files: {missing}")
+
+              forbidden_prefixes = (
+                  ".git/",
+                  ".github/",
+                  "development scripts/",
+                  "tests/",
+                  "build/",
+                  "dist/",
+                  "lib/",
+                  "__pycache__/",
+              )
+              forbidden = sorted(
+                  name for name in names
+                  if name.startswith(forbidden_prefixes) or "/__pycache__/" in name
+              )
+              if forbidden:
+                  raise SystemExit(f"Archive contains development files: {forbidden[:10]}")
+
+              manifest = tomllib.loads(archive.read("blender_manifest.toml").decode())
+              expected_name = f"{manifest['id']}-{manifest['version']}.zip"
+              if packages[0].name != expected_name:
+                  raise SystemExit(
+                      f"Expected archive name {expected_name!r}, got {packages[0].name!r}"
+                  )
+          PY
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: medblend-extension
+          path: dist/*.zip
+          if-no-files-found: error

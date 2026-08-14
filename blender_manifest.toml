@@ -1,29 +1,41 @@
 schema_version = "1.0.0"
 
-# Example of manifest file for a Blender extension
-# Change the values according to your extension
 id = "medblend"
 version = "2.0.0"
 name = "MedBlend"
-tagline = "A medical visualization add-on for Blender"
-maintainer = "Michael Douglass"
+tagline = "Import and visualise radiotherapy DICOM data"
+maintainer = "Michael Douglass <michael.douglass@adelaide.edu.au>"
 type = "add-on"
 website = "https://github.com/drmichaeldouglass/MedBlend"
-tags = [
-	"3D View",
-]
-blender_version_min = "5.0.0"
-license = [
-  "SPDX:MIT"
-]
-copyright =[
-	"2022-2024 Michael Douglass",
-]
+tags = ["3D View", "Import-Export"]
 
+blender_version_min = "5.0.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+  "SPDX:MIT",
+]
+copyright = ["2022-2026 Michael Douglass"]
 
 wheels = [
-    "./wheels/pydicom-3.0.1-py3-none-any.whl",
+  "./wheels/pydicom-3.0.1-py3-none-any.whl",
 ]
 
 [permissions]
-files = "Importing DICOM data from disk and caching temporary VDB files"
+files = "Import DICOM data and write generated VDB files"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/.github/",
+  "/.gitignore",
+  "/development scripts/",
+  "/tests/",
+  "/build/",
+  "/dist/",
+  "/lib/",
+  "/pytest.ini",
+  "/requirements*.txt",
+  "/*.zip",
+]
