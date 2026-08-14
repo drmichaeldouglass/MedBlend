@@ -110,7 +110,7 @@ class MEDBLEND_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "vdb_temp_dir")
 
 
-class SNA_PT_MEDBLEND_70A7C(bpy.types.Panel):
+class MEDBLEND_PT_Main(bpy.types.Panel):
     bl_label = "MedBlend"
     bl_idname = "MEDBLEND_PT_main"
     bl_space_type = "VIEW_3D"
@@ -175,7 +175,27 @@ class MEDBLEND_OT_Clear_Vdb_Temp_Dir(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
+def _run_import(operator, loader) -> set:
+    """Validate the file browser selection, then run ``loader`` on it.
+
+    DICOM files frequently have no extension, so ``filter_glob`` stays at ``*``
+    and the selection is checked here instead - picking a directory or leaving
+    the field blank would otherwise reach pydicom as a confusing read error.
+    """
+
+    if not operator.filepath:
+        operator.report({"ERROR"}, "No file was selected.")
+        return {"CANCELLED"}
+
+    selected = Path(operator.filepath)
+    if not selected.is_file():
+        operator.report({"ERROR"}, f"'{selected}' is not a file. Select a single DICOM file.")
+        return {"CANCELLED"}
+
+    return {"FINISHED"} if loader(selected) else {"CANCELLED"}
+
+
+class MEDBLEND_OT_Load_Ct(bpy.types.Operator, ImportHelper):
     bl_idname = "medblend.load_ct"
     bl_label = "Load CT"
     bl_description = "Load a CT Dataset"
@@ -183,11 +203,10 @@ class SNA_OT_Load_Ct_Fc7B9(bpy.types.Operator, ImportHelper):
     filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
-        success = load_ct_series(Path(self.filepath))
-        return {"FINISHED"} if success else {"CANCELLED"}
+        return _run_import(self, load_ct_series)
 
 
-class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
+class MEDBLEND_OT_Load_Proton(bpy.types.Operator, ImportHelper):
     bl_idname = "medblend.load_proton"
     bl_label = "Load Proton"
     bl_description = "Load Proton Spots and Weights"
@@ -195,11 +214,10 @@ class SNA_OT_Load_Proton_1Dbc6(bpy.types.Operator, ImportHelper):
     filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
-        success = load_proton_plan(Path(self.filepath))
-        return {"FINISHED"} if success else {"CANCELLED"}
+        return _run_import(self, load_proton_plan)
 
 
-class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
+class MEDBLEND_OT_Load_Dose(bpy.types.Operator, ImportHelper):
     bl_idname = "medblend.load_dose"
     bl_label = "Load Dose"
     bl_description = "Load a DICOM Dose File"
@@ -207,11 +225,10 @@ class SNA_OT_Load_Dose_7629F(bpy.types.Operator, ImportHelper):
     filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
-        success = load_dose(Path(self.filepath))
-        return {"FINISHED"} if success else {"CANCELLED"}
+        return _run_import(self, load_dose)
 
 
-class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
+class MEDBLEND_OT_Load_Structures(bpy.types.Operator, ImportHelper):
     bl_idname = "medblend.load_structures"
     bl_label = "Load Structures"
     bl_description = "Load a DICOM Structure Set"
@@ -219,19 +236,18 @@ class SNA_OT_Load_Structures_5Ebc9(bpy.types.Operator, ImportHelper):
     filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
     def execute(self, _context):
-        success = load_structures(Path(self.filepath))
-        return {"FINISHED"} if success else {"CANCELLED"}
+        return _run_import(self, load_structures)
 
 
 classes: tuple[type, ...] = (
     MEDBLEND_Preferences,
-    SNA_PT_MEDBLEND_70A7C,
+    MEDBLEND_PT_Main,
     MEDBLEND_OT_Select_Vdb_Temp_Dir,
     MEDBLEND_OT_Clear_Vdb_Temp_Dir,
-    SNA_OT_Load_Ct_Fc7B9,
-    SNA_OT_Load_Proton_1Dbc6,
-    SNA_OT_Load_Dose_7629F,
-    SNA_OT_Load_Structures_5Ebc9,
+    MEDBLEND_OT_Load_Ct,
+    MEDBLEND_OT_Load_Proton,
+    MEDBLEND_OT_Load_Dose,
+    MEDBLEND_OT_Load_Structures,
 )
 
 

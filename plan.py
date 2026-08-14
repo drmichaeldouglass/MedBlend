@@ -11,17 +11,36 @@ import pydicom
 from mathutils import Matrix
 
 from .blender_utils import add_data_fields, create_object
+from .dicom_util import float_or
 from .node_groups import apply_proton_spots_geo_nodes
 from .ui_utils import show_message_box
 
 
+RT_ION_PLAN_STORAGE_UID = "1.2.840.10008.5.1.4.1.1.481.8"
+
+
 def is_proton_plan(ds: pydicom.Dataset) -> bool:
-    """Return ``True`` when the dataset represents an RT Ion plan."""
+    """Return ``True`` when the dataset represents an RT Ion plan.
+
+    Real RT Ion Plan files carry ``Modality`` "RTPLAN" - the RT Series module
+    shares its enumerated values with the conventional RT Plan IOD, and the
+    ion variant is identified by its SOP Class UID instead. Matching only on a
+    literal "RTION" modality rejected every standards-conformant plan, so
+    accept the SOP Class UID, and otherwise fall back to an RT plan that
+    actually carries an ``IonBeamSequence``.
+    """
 
     try:
-        return str(ds.Modality).upper() == "RTION"
+        if str(getattr(ds, "SOPClassUID", "")) == RT_ION_PLAN_STORAGE_UID:
+            return True
+        modality = str(getattr(ds, "Modality", "")).upper().strip()
+        if modality == "RTION":
+            return True
+        if modality == "RTPLAN" and getattr(ds, "IonBeamSequence", None) is not None:
+            return True
     except Exception:
         return False
+    return False
 
 
 def _as_float_list(values) -> list[float]:
@@ -53,10 +72,14 @@ def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
     maps to the patient +Y axis in this convention.
     """
 
-    gantry_angle = float(getattr(control_point, "GantryAngle", 0.0) or 0.0)
-    couch_angle = float(getattr(control_point, "PatientSupportAngle", 0.0) or 0.0)
-    iso_center_raw = getattr(control_point, "IsocenterPosition", (0.0, 0.0, 0.0))
-    iso_center = tuple(float(val) / 1000.0 for val in iso_center_raw)
+    gantry_angle = float_or(getattr(control_point, "GantryAngle", None), 0.0)
+    couch_angle = float_or(getattr(control_point, "PatientSupportAngle", None), 0.0)
+    # IsocenterPosition is Type 1C and may be absent or empty on the first
+    # control point, in which case the beam sits at the scene origin.
+    iso_center_raw = getattr(control_point, "IsocenterPosition", None) or (0.0, 0.0, 0.0)
+    iso_center = tuple(float_or(value, 0.0) / 1000.0 for value in iso_center_raw)
+    if len(iso_center) != 3:
+        iso_center = (0.0, 0.0, 0.0)
 
     rotation = Matrix.Rotation(math.radians(couch_angle), 4, "Y") @ Matrix.Rotation(
         math.radians(gantry_angle), 4, "Z"
@@ -140,9 +163,10 @@ def load_proton_plan(file_path: Path) -> bool:
             continue
 
         mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
-        data_fields = ["spot_x", "spot_y", "spot_E", "spot_weight"]
-        add_data_fields(mesh, data_fields)
+        # Add the vertices before the attribute layers so each layer is created
+        # already sized to the point domain.
         mesh.vertices.add(count)
+        add_data_fields(mesh, ["spot_x", "spot_y", "spot_E", "spot_weight"])
 
         mesh.attributes["spot_x"].data.foreach_set("value", x_vals)
         mesh.attributes["spot_y"].data.foreach_set("value", y_vals)
@@ -152,14 +176,20 @@ def load_proton_plan(file_path: Path) -> bool:
         coords[::3] = [0.01 * row for row in range(count)]
         mesh.vertices.foreach_set("co", coords)
 
-        mesh.update()
         mesh.validate()
+        mesh.update()
 
         if mesh.vertices:
             obj = create_object(mesh, mesh.name)
             obj.matrix_world = _beam_world_matrix(control_points[0])
-            apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots")
+            obj["medblend_beam_number"] = int(float_or(getattr(beam, "BeamNumber", beam_index), beam_index))
+            beam_name = str(getattr(beam, "BeamName", "") or "")
+            if beam_name:
+                obj["medblend_beam_name"] = beam_name
+            apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots", obj=obj)
             imported_beam_count += 1
+        else:
+            bpy.data.meshes.remove(mesh)
 
     if imported_beam_count == 0:
         show_message_box(
@@ -176,7 +206,7 @@ def load_proton_plan(file_path: Path) -> bool:
         show_message_box(
             f"Imported {imported_beam_count} beam(s) with {len(warnings)} warning(s): {preview}",
             "Proton Import Warnings",
-            "ERROR",
+            "INFO",
         )
 
     return True

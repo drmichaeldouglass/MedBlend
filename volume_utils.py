@@ -25,16 +25,17 @@ def _default_temp_base_dir() -> Path:
 
 
 def _get_vdb_temp_dir() -> Optional[Path]:
-    addon = bpy.context.preferences.addons.get(__package__)
-    if not addon:
-        return None
-    prefs = addon.preferences
-    if not getattr(prefs, "vdb_temp_dir", ""):
-        return None
     try:
+        addon = bpy.context.preferences.addons.get(__package__)
+        if not addon:
+            return None
+        prefs = addon.preferences
+        if not getattr(prefs, "vdb_temp_dir", ""):
+            return None
         resolved = bpy.path.abspath(prefs.vdb_temp_dir)
         return Path(resolved)
     except Exception:
+        # Preferences are unavailable in some background/headless contexts.
         return None
 
 
@@ -176,10 +177,30 @@ def align_object_to_ct_frame(
     return True
 
 
+def _new_volume_data(output_path: Path) -> bpy.types.Volume:
+    """Create a Volume datablock pointing at ``output_path``.
+
+    ``bpy.data.volumes`` does not expose ``load()`` on every Blender build, so
+    fall back to creating an empty Volume and pointing its ``filepath`` at the
+    file - Blender reads the grids lazily from there either way.
+    """
+
+    loader = getattr(bpy.data.volumes, "load", None)
+    if callable(loader):
+        try:
+            return loader(str(output_path))
+        except Exception:
+            pass
+
+    volume_data = bpy.data.volumes.new(output_path.stem)
+    volume_data.filepath = str(output_path)
+    return volume_data
+
+
 def _import_volume_data_api(output_path: Path) -> bpy.types.Object:
     """Import a VDB file using Blender data API to avoid context-sensitive operators."""
 
-    volume_data = bpy.data.volumes.load(str(output_path))
+    volume_data = _new_volume_data(output_path)
     obj = bpy.data.objects.new(output_path.stem, volume_data)
     _link_object_to_context_collection(obj)
     return obj
@@ -242,6 +263,21 @@ def write_vdb_volume(
         )
         return None
 
+    # FloatGrid stores single precision; converting up front halves peak memory
+    # and avoids dtype-strict copyFromArray builds rejecting float64.
+    try:
+        voxels = np.ascontiguousarray(array, dtype=np.float32)
+    except Exception as exc:
+        show_message_box(f"Voxel data could not be converted for VDB export: {exc}", "Error", "ERROR")
+        return None
+    if voxels.ndim != 3 or voxels.size == 0:
+        show_message_box(
+            f"Expected a non-empty 3D voxel array, got shape {tuple(voxels.shape)}.",
+            "Error",
+            "ERROR",
+        )
+        return None
+
     try:
         openvdb = _import_openvdb_module()
     except Exception as exc:
@@ -250,9 +286,14 @@ def write_vdb_volume(
 
     try:
         grid = openvdb.FloatGrid()
-        # FloatGrid stores single precision; converting up front halves peak
-        # memory and avoids dtype-strict copyFromArray builds rejecting float64.
-        grid.copyFromArray(np.ascontiguousarray(array, dtype=np.float32))
+        grid.copyFromArray(voxels)
+        # copyFromArray activates every voxel, including the empty background
+        # that dominates structure masks and air around a CT. Pruning collapses
+        # those uniform regions, which shrinks the file and speeds up rendering.
+        try:
+            grid.prune(0.0)
+        except Exception:
+            pass
         grid.transform = openvdb.createLinearTransform(
             [
                 [spacing[0] / 1000.0, 0, 0, 0],

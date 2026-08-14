@@ -29,7 +29,23 @@ jobs:
             --exclude ".gitattributes" \
             --exclude ".gitmodules" \
             --exclude "__pycache__/" \
-            --exclude "development scripts/"
+            --exclude "development scripts/" \
+            --exclude "tests/" \
+            --exclude "lib/" \
+            --exclude "pytest.ini" \
+            --exclude "requirements-dev.txt"
+
+          # The manifest drives installation, so a broken one must fail the build
+          # rather than ship a zip Blender refuses to enable.
+          python3 -c "
+          import sys, tomllib, pathlib
+          manifest = pathlib.Path('$STAGE_DIR/MedBlend/blender_manifest.toml')
+          data = tomllib.loads(manifest.read_text())
+          for wheel in data.get('wheels', []):
+              if not (manifest.parent / wheel).is_file():
+                  sys.exit(f'Manifest references a missing wheel: {wheel}')
+          print(f\"Packaging {data['id']} {data['version']}\")
+          "
 
           (
             cd "$STAGE_DIR"
