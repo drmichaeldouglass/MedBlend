@@ -41,7 +41,8 @@ jobs:
           )
 
       - name: Validate extension source
-        run: "$BLENDER_DIR/blender" --command extension validate .
+        run: |
+          "$BLENDER_DIR/blender" --command extension validate .
 
       - name: Build extension
         run: |
