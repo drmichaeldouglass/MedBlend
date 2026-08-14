@@ -97,7 +97,7 @@ MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Loa
 
 -Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. 
 
--Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system and import each structure as a separate point cloud. 
+-Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
 
 -Load Proton Plan will import a DICOM RT Ion proton therapy plan file and extract the proton spot positions and weights and display them as spheres with a radius proportional to the relative spot weight. 
 
@@ -113,7 +113,17 @@ To change the material properties, select the Shading tab from the top edge and 
 
 ![materials3](https://user-images.githubusercontent.com/52724915/226318971-e3f63834-0569-43a0-8828-2ea77c7fe8cd.png)
 
-Generally, DICOM CT is not normalised and pixel values (Hounsfield units) can range from -1000 to > 2000 usually. A value of -10000 generally indicates air density, a value of 0 indicates water density and bone and other high density materials have values >1000. To account for this in the shader material, it may be necessary to add a Map Range node after the volume info node and setting the maximum and miniumum input values to suit your specific dataset. 
+DICOM CT is stored in Hounsfield units, which typically run from about -1000 (air) through 0 (water) to well beyond 1000 (bone). MedBlend normalises each imported image volume to the range `0 - 1` so it renders correctly without per-dataset shader tweaking, and records the source range on the imported object as the custom properties `medblend_intensity_min` and `medblend_intensity_max` (visible in `Object Properties > Custom Properties`).
+
+To work in Hounsfield units, convert a normalised voxel value back with:
+
+```
+HU = value * (medblend_intensity_max - medblend_intensity_min) + medblend_intensity_min
+```
+
+A Map Range node after the Volume Info node is the easiest way to isolate a particular HU window - map the normalised `0 - 1` input down to the fraction of the range that your tissue of interest occupies.
+
+Imported dose volumes are *not* normalised: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`.
 
 ![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
 
@@ -128,11 +138,11 @@ Start by creating a place-holder object. From the add menu, add a cube into the 
 With the cube selected, go to the modifer menu, select Add Modifier and add a Volume to Mesh modifier.
 ![volume_to_mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/7f940498-9199-4bc3-b13e-75f76834846a)
 
-From the object property, select the CT volume. Depending on the normalisation of the volume, you will need to adjust the threshold to visulise the data. For most CT data, a threshold value of 100 is a good starting point
+From the object property, select the CT volume, then adjust the threshold to isolate the tissue you want. Because MedBlend normalises image volumes to `0 - 1`, the threshold lives in that range too - around `0.4` is a good starting point for bone in a typical CT, and lower values pick up soft tissue. Use the `medblend_intensity_min`/`medblend_intensity_max` custom properties on the volume if you need to pick a threshold for a specific HU value.
 
 ![volume_to_mesh_select_CT](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/decbcaab-e009-4f8a-b5a3-eb1d1cec4795)
 
-This is what the mesh should look like with a threshold set to 100. You can apply this modifier from the Volume to Mesh modifier panel to bake the mesh which will allow for manual adjustments.
+This is what the mesh should look like at a threshold that isolates bone. You can apply this modifier from the Volume to Mesh modifier panel to bake the mesh which will allow for manual adjustments.
 
 ![CT_Mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/c8b74c1d-baa3-4962-b29e-5eff716fb3f8)
 
@@ -152,8 +162,20 @@ A test proton therapy plan on a phantom. The CT images, dose distribution and pr
 
 
 
+## Development
+
+The DICOM parsing and geometry code is covered by a test suite that runs outside Blender - `tests/stubs` provides minimal `bpy`/`mathutils` stand-ins so the modules can be imported by pytest.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite covers slice ordering and stacking, dose grid geometry, RT structure rasterisation, mask cropping, and the CT co-registration maths. It runs automatically on every push and pull request. Anything that touches Blender's volume, material or object APIs still needs manual verification inside Blender.
+
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
+- Contours are rasterised using an even-odd point-in-polygon test sampled at voxel centres, so a structure boundary is resolved to the nearest voxel. Small structures relative to the CT voxel size will show that quantisation.
 - Imported CT, dose, structure, and proton spot objects are now all placed in the DICOM patient coordinate system (millimetres mapped to metres), so they co-register automatically regardless of import order. Note that the CT volume is therefore no longer centred at the world origin.
 - Proton beam orientation (gantry and couch rotation) assumes a head-first supine (HFS) patient; other patient orientations have not been verified and a warning is shown when the plan reports a different patient position.
 - If bundled dependencies were missing from the installed package, MedBlend will fail to load. Reinstall using the official release zip and ensure the `wheels/` directory is included.

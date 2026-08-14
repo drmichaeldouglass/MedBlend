@@ -36,6 +36,15 @@ def load_ct_series(file_path: Path) -> bool:
         return False
 
     images = load_dicom_series(file_path.parent, series_uid)
+    if not images:
+        show_message_box(
+            "No readable CT/MR slices for this series were found next to the selected "
+            f"file. Check that the other slices of series {series_uid} are in "
+            f"'{file_path.parent}'.",
+            "Error",
+            "ERROR",
+        )
+        return False
     sorted_images = sort_slices_spatially(images)
 
     try:
@@ -51,7 +60,7 @@ def load_ct_series(file_path: Path) -> bool:
         show_message_box(str(exc), "Error", "ERROR")
         return False
 
-    ct_volume = rescale_dicom_image(ct_volume)
+    ct_volume, intensity_min, intensity_max = rescale_dicom_image(ct_volume)
 
     slice_spacing = slice_spacing or 1.0
     spacing_values = (float(slice_spacing), float(spacing[0]), float(spacing[1]))
@@ -97,6 +106,11 @@ def load_ct_series(file_path: Path) -> bool:
         ct_object["medblend_ct_origin_mm"] = [float(v) for v in array_origin]
         ct_object["medblend_ct_basis_mm"] = [float(v) for v in basis.reshape(-1)]
         ct_object["medblend_ct_spacing_mm"] = [float(v) for v in spacing_values]
+        # Voxels are normalised to [0, 1] for rendering; keep the source range so
+        # a value can be mapped back to Hounsfield units:
+        #   HU = value * (max - min) + min
+        ct_object["medblend_intensity_min"] = float(intensity_min)
+        ct_object["medblend_intensity_max"] = float(intensity_max)
 
         # Place the CT in DICOM patient coordinates (mm -> m) so dose,
         # structures, and proton plans land in the same frame regardless of
@@ -115,5 +129,5 @@ def load_ct_series(file_path: Path) -> bool:
         # Metadata is best-effort and should not block import.
         pass
 
-    apply_dicom_shader("Image Material")
+    apply_dicom_shader("Image Material", ct_object)
     return True

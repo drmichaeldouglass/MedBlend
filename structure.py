@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pydicom
 
-from .dicom_util import check_dicom_image_type, is_structure_file
-from .node_groups import apply_dicom_shader
+from .dicom_util import check_dicom_image_type, float_or, is_structure_file, positive_float_or
+from .node_groups import apply_structure_material
 from .ui_utils import show_message_box
 from .volume_utils import (
     align_object_to_ct_frame,
@@ -87,23 +87,21 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
     sorted_projections = [pair[0] for pair in sorted_pairs]
     sorted_slices = [pair[1] for pair in sorted_pairs]
 
-    pixel_spacing = getattr(sorted_slices[0], "PixelSpacing", [1.0, 1.0])
+    pixel_spacing = getattr(sorted_slices[0], "PixelSpacing", None) or [1.0, 1.0]
     if len(pixel_spacing) < 2:
         raise ValueError("Referenced images are missing PixelSpacing.")
-    row_spacing = float(pixel_spacing[0])
-    col_spacing = float(pixel_spacing[1])
+    row_spacing = positive_float_or(pixel_spacing[0], 0.0)
+    col_spacing = positive_float_or(pixel_spacing[1], 0.0)
     if row_spacing <= 0 or col_spacing <= 0:
         raise ValueError("Referenced images have invalid PixelSpacing.")
 
+    fallback_thickness = positive_float_or(getattr(sorted_slices[0], "SliceThickness", None), 1.0)
+    slice_spacing = fallback_thickness
     if len(sorted_projections) > 1:
         deltas = np.diff(np.asarray(sorted_projections))
         non_zero = np.abs(deltas) > 1e-6
         if np.any(non_zero):
             slice_spacing = float(np.median(np.abs(deltas[non_zero])))
-        else:
-            slice_spacing = float(getattr(sorted_slices[0], "SliceThickness", 1.0))
-    else:
-        slice_spacing = float(getattr(sorted_slices[0], "SliceThickness", 1.0))
     if slice_spacing <= 0:
         slice_spacing = 1.0
 
@@ -335,14 +333,53 @@ def _roi_display_color(roi_contour: pydicom.Dataset) -> tuple[float, float, floa
     return (values[0] / 255.0, values[1] / 255.0, values[2] / 255.0, 1.0)
 
 
-def _rtstruct_to_masks(
-    dicom_structure: pydicom.Dataset, geometry
-) -> tuple[list[np.ndarray], list[str], list[tuple[float, float, float, float] | None]]:
+def crop_mask_to_bounds(
+    mask: np.ndarray, geometry
+) -> tuple[np.ndarray, np.ndarray]:
+    """Trim a full-grid mask to its occupied box and return the shifted origin.
+
+    A structure typically fills a few percent of the CT grid, so writing every
+    ROI at full grid extent produces hundreds of megabytes of almost-empty
+    voxels per ROI. Cropping keeps the geometry identical by moving the origin
+    to the patient position of the first retained voxel.
+    """
+
+    occupied = np.nonzero(mask)
+    origin = np.asarray(geometry["origin"], dtype=float)
+    if not len(occupied[0]):
+        return mask, origin
+
+    slice_start = int(occupied[0].min())
+    row_start = int(occupied[1].min())
+    col_start = int(occupied[2].min())
+    cropped = mask[
+        slice_start : int(occupied[0].max()) + 1,
+        row_start : int(occupied[1].max()) + 1,
+        col_start : int(occupied[2].max()) + 1,
+    ]
+
+    # ``basis`` maps [row, col, slice] index offsets to patient millimetres.
+    basis = np.asarray(geometry["basis"], dtype=float)
+    shifted_origin = origin + basis @ np.asarray([row_start, col_start, slice_start], dtype=float)
+    return np.ascontiguousarray(cropped), shifted_origin
+
+
+def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
+    """Yield ``(roi_name, mask, color, skipped_contours)`` one ROI at a time.
+
+    Masks are produced lazily and kept as ``bool`` so only a single ROI volume
+    is resident at a time; materialising every ROI as ``float64`` up front cost
+    64x the memory and ran out of RAM on full-resolution structure sets.
+
+    ``mask`` is ``None`` when an ROI rasterised to nothing. Those are still
+    yielded so the caller can report an ROI that was dropped entirely rather
+    than letting it vanish from the import silently.
+    """
+
     roi_names = {}
     for roi in getattr(dicom_structure, "StructureSetROISequence", []):
-        roi_number = int(getattr(roi, "ROINumber", -1))
-        roi_name = str(getattr(roi, "ROIName", f"ROI_{roi_number}"))
-        roi_names[roi_number] = roi_name
+        roi_number = int(float_or(getattr(roi, "ROINumber", -1), -1))
+        roi_names[roi_number] = str(getattr(roi, "ROIName", "") or f"ROI_{roi_number}")
 
     rows = geometry["rows"]
     cols = geometry["cols"]
@@ -350,14 +387,11 @@ def _rtstruct_to_masks(
     origin = geometry["origin"]
     inv_basis = geometry["inv_basis"]
 
-    struct_masks: list[np.ndarray] = []
-    struct_names: list[str] = []
-    struct_colors: list[tuple[float, float, float, float] | None] = []
-
     for roi_contour in getattr(dicom_structure, "ROIContourSequence", []):
-        roi_number = int(getattr(roi_contour, "ReferencedROINumber", -1))
+        roi_number = int(float_or(getattr(roi_contour, "ReferencedROINumber", -1), -1))
         roi_name = roi_names.get(roi_number, f"ROI_{roi_number}")
         volume_mask = np.zeros((num_slices, rows, cols), dtype=bool)
+        skipped = 0
 
         for contour in getattr(roi_contour, "ContourSequence", []):
             # Only closed planar contours describe filled regions; open
@@ -374,6 +408,9 @@ def _rtstruct_to_masks(
 
             slice_index = int(np.rint(np.mean(ijk[:, 2])))
             if slice_index < 0 or slice_index >= num_slices:
+                # The contour lies outside the reconstructed slice range, which
+                # happens when only part of the referenced series is present.
+                skipped += 1
                 continue
 
             polygon_rc = ijk[:, :2]
@@ -382,12 +419,11 @@ def _rtstruct_to_masks(
             # XOR composition matches typical RTSTRUCT contour hole semantics.
             volume_mask[slice_index] ^= polygon_mask
 
+        color = _roi_display_color(roi_contour)
         if np.any(volume_mask):
-            struct_masks.append(volume_mask.astype(float))
-            struct_names.append(roi_name)
-            struct_colors.append(_roi_display_color(roi_contour))
-
-    return struct_masks, struct_names, struct_colors
+            yield roi_name, volume_mask, color, skipped
+        else:
+            yield roi_name, None, color, skipped
 
 
 def load_structures(file_path: Path) -> bool:
@@ -410,7 +446,6 @@ def load_structures(file_path: Path) -> bool:
             geometry = _build_geometry(image_slices)
         else:
             geometry = _build_geometry_from_contours(dicom_structure)
-        struct_masks, struct_names, struct_colors = _rtstruct_to_masks(dicom_structure, geometry)
     except Exception as exc:
         show_message_box(
             f"Unable to convert RT Structure contours: {exc}",
@@ -419,37 +454,92 @@ def load_structures(file_path: Path) -> bool:
         )
         return False
 
-    if not struct_masks:
-        show_message_box("No contour masks were generated from this RT Structure Set.", "Error", "ERROR")
-        return False
-
     spacing = geometry["spacing"]
     frame_uid = _get_structure_frame_uid(dicom_structure)
     ct_anchor = find_ct_anchor(frame_uid)
-    for mask, name, color in zip(struct_masks, struct_names, struct_colors):
-        result = write_vdb_volume(mask, spacing, f"{name}.vdb")
-        if not result:
-            return False
-        _output_path, imported_obj = result
-        if color:
-            imported_obj.color = color
-        aligned = False
-        if ct_anchor:
-            aligned = align_object_to_ct_frame(
-                imported_obj,
-                ct_anchor,
-                geometry["origin"],
-                geometry["vdb_basis"],
-                spacing,
-            )
-        if not aligned:
-            set_object_patient_transform(
-                imported_obj,
-                geometry["origin"],
-                geometry["slice_axis_dir"],
-                geometry["row_axis_dir"],
-                geometry["col_axis_dir"],
-            )
-        apply_dicom_shader("Structure Material")
+
+    imported_count = 0
+    failed_names: list[str] = []
+    empty_names: list[str] = []
+    skipped_contours = 0
+    fatal_error = None
+
+    try:
+        roi_masks = iter_roi_masks(dicom_structure, geometry)
+        for roi_name, mask, color, skipped in roi_masks:
+            skipped_contours += skipped
+            if mask is None:
+                empty_names.append(roi_name)
+                continue
+
+            # Crop before writing so each ROI only occupies its own bounding
+            # box rather than the whole CT grid.
+            cropped, roi_origin = crop_mask_to_bounds(mask, geometry)
+            del mask
+
+            result = write_vdb_volume(cropped, spacing, f"{roi_name}.vdb")
+            if not result:
+                # One unwritable ROI should not discard the ones that worked.
+                failed_names.append(roi_name)
+                continue
+            _output_path, imported_obj = result
+
+            if color:
+                imported_obj.color = color
+            imported_obj["medblend_roi_name"] = roi_name
+
+            aligned = False
+            if ct_anchor:
+                aligned = align_object_to_ct_frame(
+                    imported_obj,
+                    ct_anchor,
+                    roi_origin,
+                    geometry["vdb_basis"],
+                    spacing,
+                )
+            if not aligned:
+                set_object_patient_transform(
+                    imported_obj,
+                    roi_origin,
+                    geometry["slice_axis_dir"],
+                    geometry["row_axis_dir"],
+                    geometry["col_axis_dir"],
+                )
+            apply_structure_material(imported_obj, roi_name, color)
+            imported_count += 1
+    except Exception as exc:
+        # Structures imported before the failure are already in the scene, so
+        # report the error but keep them rather than reporting a clean cancel.
+        fatal_error = exc
+
+    if imported_count == 0:
+        message = (
+            f"Unable to convert RT Structure contours: {fatal_error}"
+            if fatal_error
+            else "No contour masks were generated from this RT Structure Set."
+        )
+        show_message_box(message, "Error", "ERROR")
+        return False
+
+    notes = []
+    if fatal_error:
+        notes.append(f"import stopped early: {fatal_error}")
+    if failed_names:
+        notes.append(f"{len(failed_names)} structure(s) could not be written: {', '.join(failed_names[:5])}")
+    if empty_names:
+        notes.append(
+            f"{len(empty_names)} structure(s) produced no voxels and were skipped: "
+            f"{', '.join(empty_names[:5])}"
+        )
+    if skipped_contours:
+        notes.append(
+            f"{skipped_contours} contour(s) fell outside the reconstructed slice range and were skipped"
+        )
+    if notes:
+        show_message_box(
+            f"Imported {imported_count} structure(s). " + ". ".join(notes) + ".",
+            "Structure Import Warnings",
+            "INFO",
+        )
 
     return True

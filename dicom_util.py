@@ -45,6 +45,7 @@ def load_dicom_series(folder: Path, series_uid: str) -> List[pydicom.Dataset]:
     """
 
     matching_paths: List[Path] = []
+    seen_sop_uids: set[str] = set()
     for file_path in sorted(folder.iterdir()):
         if not file_path.is_file():
             continue
@@ -56,6 +57,13 @@ def load_dicom_series(folder: Path, series_uid: str) -> List[pydicom.Dataset]:
             continue
         if getattr(header, "SeriesInstanceUID", None) != series_uid:
             continue
+        # Copies of the same slice (``IMG1.dcm`` and ``IMG1 (1).dcm``) would
+        # otherwise be stacked twice and double the apparent slice count.
+        sop_uid = str(getattr(header, "SOPInstanceUID", ""))
+        if sop_uid:
+            if sop_uid in seen_sop_uids:
+                continue
+            seen_sop_uids.add(sop_uid)
         matching_paths.append(file_path)
 
     images: List[pydicom.Dataset] = []
@@ -67,15 +75,21 @@ def load_dicom_series(folder: Path, series_uid: str) -> List[pydicom.Dataset]:
     return images
 
 
-def rescale_dicom_image(array: np.ndarray) -> np.ndarray:
-    """Scale the array into the range ``[0, 1]``."""
+def rescale_dicom_image(array: np.ndarray) -> Tuple[np.ndarray, float, float]:
+    """Scale the array into ``[0, 1]`` and report the source intensity range.
 
+    The original min/max are returned so callers can record the mapping back
+    to Hounsfield units, which the normalisation would otherwise discard.
+    """
+
+    array = np.asarray(array, dtype=np.float32)
     min_value = float(np.min(array))
     max_value = float(np.max(array))
     if max_value == min_value:
-        return np.zeros_like(array, dtype=float)
+        return np.zeros_like(array, dtype=np.float32), min_value, max_value
 
-    return (array - min_value) / (max_value - min_value)
+    scaled = (array - min_value) / (max_value - min_value)
+    return np.asarray(scaled, dtype=np.float32), min_value, max_value
 
 
 def _instance_number_key(ds: pydicom.Dataset) -> int:
@@ -156,18 +170,34 @@ def _compute_slice_spacing(
     except Exception:
         pass
 
-    try:
-        spacing = float(fallback_thickness)
-    except (TypeError, ValueError):
-        spacing = 0.0
-    return spacing if spacing > 0 else 1.0
+    return positive_float_or(fallback_thickness, 1.0)
 
 
-def _float_or(value, default: float) -> float:
+def float_or(value, default: float) -> float:
+    """Coerce a DICOM value to ``float``, falling back to ``default``.
+
+    Type 2 attributes such as ``SliceThickness`` are frequently present but
+    empty, in which case pydicom yields ``None`` and a bare ``float()`` call
+    raises ``TypeError``.
+    """
+
     try:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def positive_float_or(value, default: float) -> float:
+    """Like :func:`float_or`, but also rejects zero, negative and NaN values."""
+
+    result = float_or(value, default)
+    if not np.isfinite(result) or result <= 0:
+        return default
+    return result
+
+
+# Backwards-compatible private alias used elsewhere in this module.
+_float_or = float_or
 
 
 def extract_dicom_data(
@@ -178,24 +208,51 @@ def extract_dicom_data(
     if not images:
         raise ValueError("No DICOM images were provided for extraction")
 
+    expected_shape = None
     dicom_3d_array = []
     slice_positions = []
-    for dataset in images:
-        pixels = np.asarray(dataset.pixel_array, dtype=np.float32)
+    for index, dataset in enumerate(images):
+        try:
+            pixels = np.asarray(dataset.pixel_array, dtype=np.float32)
+        except Exception as exc:
+            raise ValueError(
+                f"Could not decode pixel data for slice {index + 1} of {len(images)}. "
+                f"The transfer syntax may be unsupported by pydicom: {exc}"
+            ) from exc
+
+        if pixels.ndim != 2:
+            raise ValueError(
+                f"Slice {index + 1} has {pixels.ndim} pixel dimensions; only single-frame "
+                "2D CT/MR slices are supported."
+            )
+        # Mixed in-plane sizes cannot be stacked into one volume, and NumPy's
+        # own error for a ragged stack does not say which file is at fault.
+        if expected_shape is None:
+            expected_shape = pixels.shape
+        elif pixels.shape != expected_shape:
+            raise ValueError(
+                f"Slice {index + 1} is {pixels.shape[0]}x{pixels.shape[1]} but the series "
+                f"starts with {expected_shape[0]}x{expected_shape[1]}. All slices in a "
+                "series must share the same matrix size."
+            )
+
         # Apply the modality LUT per slice: RescaleSlope/Intercept may differ
         # between slices, in which case raw stored values are not comparable.
-        slope = _float_or(getattr(dataset, "RescaleSlope", 1.0), 1.0)
-        intercept = _float_or(getattr(dataset, "RescaleIntercept", 0.0), 0.0)
+        slope = float_or(getattr(dataset, "RescaleSlope", 1.0), 1.0)
+        intercept = float_or(getattr(dataset, "RescaleIntercept", 0.0), 0.0)
         if slope != 1.0 or intercept != 0.0:
-            pixels = pixels * slope + intercept
+            pixels = pixels * np.float32(slope) + np.float32(intercept)
         dicom_3d_array.append(pixels)
         slice_positions.append(getattr(dataset, "ImagePositionPatient", (0.0, 0.0, 0.0)))
 
-    array = np.asarray(dicom_3d_array)
+    array = np.asarray(dicom_3d_array, dtype=np.float32)
     array = np.flipud(array)
 
     first = images[0]
     spacing = getattr(first, "PixelSpacing", (1.0, 1.0))
+    if spacing is None or len(spacing) < 2:
+        spacing = (1.0, 1.0)
+    spacing = (positive_float_or(spacing[0], 1.0), positive_float_or(spacing[1], 1.0))
     image_origin = getattr(first, "ImagePositionPatient", (0.0, 0.0, 0.0))
     image_orientation = getattr(first, "ImageOrientationPatient", (0.0,) * 6)
     slice_spacing = _compute_slice_spacing(
