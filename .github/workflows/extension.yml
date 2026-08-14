@@ -54,6 +54,23 @@ jobs:
           test "${#packages[@]}" -eq 1
           "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension validate "${packages[0]}"
 
+      - name: Install and enable extension
+        run: |
+          shopt -s nullglob
+          packages=(dist/*.zip)
+          test "${#packages[@]}" -eq 1
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" \
+            --command extension install-file \
+            --repo user_default \
+            --enable \
+            "${packages[0]}"
+
+      - name: Smoke test extension registration
+        run: |
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" \
+            --background \
+            --python-expr "import bpy, importlib; module = importlib.import_module('bl_ext.user_default.medblend'); assert module; assert 'bl_ext.user_default.medblend' in bpy.context.preferences.addons; import pydicom; print('MedBlend smoke test passed with pydicom', pydicom.__version__)"
+
       - name: Audit archive contents
         run: |
           python - <<'PY'
