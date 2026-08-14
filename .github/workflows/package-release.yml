@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  BLENDER_VERSION: "5.2.0"
+
 jobs:
   package:
     runs-on: ubuntu-latest
@@ -16,45 +19,43 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Build release zip
+      - name: Cache Blender
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/blender-5.2.0-linux-x64
+          key: blender-${{ env.BLENDER_VERSION }}-linux-x64
+
+      - name: Download Blender
+        if: steps.blender-cache.outputs.cache-hit != 'true'
         run: |
-          ZIP_NAME="MedBlend.zip"
-          STAGE_DIR="$(mktemp -d)"
-          mkdir -p "$STAGE_DIR/MedBlend"
-
-          rsync -a ./ "$STAGE_DIR/MedBlend/" \
-            --exclude ".git/" \
-            --exclude ".github/" \
-            --exclude ".gitignore" \
-            --exclude ".gitattributes" \
-            --exclude ".gitmodules" \
-            --exclude "__pycache__/" \
-            --exclude "development scripts/" \
-            --exclude "tests/" \
-            --exclude "lib/" \
-            --exclude "pytest.ini" \
-            --exclude "requirements-dev.txt"
-
-          # The manifest drives installation, so a broken one must fail the build
-          # rather than ship a zip Blender refuses to enable.
-          python3 -c "
-          import sys, tomllib, pathlib
-          manifest = pathlib.Path('$STAGE_DIR/MedBlend/blender_manifest.toml')
-          data = tomllib.loads(manifest.read_text())
-          for wheel in data.get('wheels', []):
-              if not (manifest.parent / wheel).is_file():
-                  sys.exit(f'Manifest references a missing wheel: {wheel}')
-          print(f\"Packaging {data['id']} {data['version']}\")
-          "
-
+          ARCHIVE="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          BASE_URL="https://download.blender.org/release/Blender5.2"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/$ARCHIVE" "$BASE_URL/$ARCHIVE"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/blender.sha256" "$BASE_URL/blender-${BLENDER_VERSION}.sha256"
           (
-            cd "$STAGE_DIR"
-            zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" "MedBlend"
+            cd "$RUNNER_TEMP"
+            grep " $ARCHIVE$" blender.sha256 | sha256sum --check
+            tar -xJf "$ARCHIVE"
           )
 
-          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+      - name: Validate extension source
+        run: |
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension validate .
+
+      - name: Build extension
+        run: |
+          mkdir -p dist
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension build --source-dir . --output-dir dist
+
+      - name: Validate built archive
+        run: |
+          shopt -s nullglob
+          packages=(dist/*.zip)
+          test "${#packages[@]}" -eq 1
+          "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" --command extension validate "${packages[0]}"
 
       - name: Upload zip to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ZIP_NAME }}
+          files: dist/*.zip

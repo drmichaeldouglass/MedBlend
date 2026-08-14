@@ -4,3 +4,5 @@ test.py
 __pycache__/
 *.pyc
 lib/
+build/
+dist/

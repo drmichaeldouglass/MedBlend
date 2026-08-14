@@ -1,84 +1,54 @@
 ![MedBlend Github](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/89374481-2c19-4142-9724-446e2286ad9a)
 
-# MedBlend 
-A Medical Visualisation Add-On for Blender
+# MedBlend
 
-> This project is still in development. The code provided here is still being developed and has not been optimised yet
+A medical visualisation extension for Blender.
+
+> MedBlend is under active development and is intended for research, education, and scientific communication.
 
 ![GitHub all releases](https://img.shields.io/github/downloads/drmichaeldouglass/MedBlend/total?style=social)
 ![GitHub Repo stars](https://img.shields.io/github/stars/drmichaeldouglass/medblend?style=social)
 ![GitHub User's stars](https://img.shields.io/github/stars/drmichaeldouglass?label=User%20Stars&style=social)
 
 
-## Introduction
+## Intended use
 
-## Intended Use
-
-This Blender add-on is intended to be used to create visulisations of radiation therapy treatment plans including DICOM images, plans, structures and dose. This can be used to create high quality figures for presentations or publications. 
+MedBlend imports DICOM images, radiotherapy dose, structure sets, and proton plans into Blender to create visualisations for research, education, presentations, and publications.
 
 ## Disclaimer
 
-This package is intended for research or educational purposes only and should not be used for clinical applications. By using this add-on you accept that this software is provided without warranty and the author will not be held liable for any damages caused by the use of this software. 
+MedBlend is not a medical device and must not be used for diagnosis, treatment planning, treatment delivery, or other clinical decisions. The software is provided without warranty.
+
+## Data handling and privacy
+
+MedBlend processes DICOM files locally and makes no network requests. It reads files selected by the user and writes generated VDB volume files to Blender's temporary directory or a directory selected in the extension preferences.
+
+DICOM data may contain identifying health information. MedBlend does not deliberately copy patient names or patient IDs into Blender, but imported voxel data, ROI and beam names, and technical DICOM identifiers can remain in generated VDB files or the saved `.blend` file. De-identify source data and review exported files before sharing them.
 
 ## Requirements
-MedBlend requires Blender 5.0 or newer, and is intended to remain compatible with Blender 5.1.
 
-MedBlend ships with the required `pydicom` wheel in the add-on package, so no separate `pip` step or in-app dependency installer is required.
+MedBlend requires Blender 5.0 or newer. It is tested against Blender 5.x, including Blender 5.2 LTS.
 
-Optional modules are needed for some features:
-- `numpy` (CT, dose, and RT structure conversion). This is included with standard Blender 5.x builds, including Blender 5.1's Python 3.13 / NumPy 2.3 environment.
-- OpenVDB Python bindings (volume import/export). Blender 5.x builds may expose this as either `openvdb` or `pyopenvdb`; MedBlend now accepts both names.
+The extension package includes the `pydicom` wheel declared in `blender_manifest.toml`. Blender installs this dependency into the extension's managed Python environment. NumPy and OpenVDB are supplied by supported Blender builds.
 
 ## Installation
 
-### Download MedBlend
+### Blender Extensions platform
 
-To download MedBlend, click the following link and select the latest release.
-https://github.com/drmichaeldouglass/MedBlend/tags
+Once MedBlend has been approved and published:
 
-Download the MedBlend release zip for the version you want to install.
+1. Open `Edit > Preferences > Get Extensions`.
+2. Search for `MedBlend`.
+3. Select `Install`.
 
-### Install MedBlend from the zip package
+### Install a release package from disk
 
-For most users, installing the zip through Blender is the correct process. Administrator rights are not normally required unless your OS or Blender installation location enforces them.
+1. Download the `medblend-<version>.zip` asset from the [latest GitHub release](https://github.com/drmichaeldouglass/MedBlend/releases/latest). Do not use GitHub's automatically generated "Source code" archives.
+2. In Blender 5.0 or newer, open `Edit > Preferences > Get Extensions`.
+3. Open the menu in the top-right corner and choose `Install from Disk`.
+4. Select the downloaded extension package.
 
-1. Open Blender 5.0 or newer.
-2. Go to `Edit > Preferences`.
-3. Open `Get Extensions` or `Add-ons` depending on your Blender build.
-4. Choose `Install from Disk` / `Install...` and select the MedBlend zip file.
-5. Enable MedBlend after installation if Blender does not enable it automatically.
-
-![Install_1](https://user-images.githubusercontent.com/52724915/220251356-2493eb54-77b3-43de-9880-fcdd381c3b20.PNG)
-![add_on_install](https://user-images.githubusercontent.com/52724915/226311722-c2d06900-b1db-4056-a5ce-64bf2ca490ba.png)
-
-After the add-on is enabled, MedBlend loads its bundled Python dependency automatically. There is no separate "Install Python Modules" step.
-
-Open the 3D viewport sidebar with `N`, select the `Medical` tab, and you should see the MedBlend import tools immediately.
-
-### Manual install for portable Blender or restricted environments
-
-If your environment does not allow normal add-on installation, you can install MedBlend manually into a portable Blender build.
-
-Releases of Blender can be downloaded from here: https://www.blender.org/download/
-
-Experimental builds can be downloaded here: https://builder.blender.org/download/daily/
-
-![blender_portable](https://user-images.githubusercontent.com/52724915/226309978-c3b34cac-d97f-49c6-9ea9-76a086e76fb7.png)
-
-
-Ensure that the version of Blender that you download is 5.0 or later. Once downloaded, unzip the file and look for `Blender.exe`. This version of Blender can be run locally without installation or saved to a USB drive.
-
-Blender, by default, installs add-ons to a versioned scripts folder under your user profile (for example: C:\Users\(username)\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons). If you do not have administrator rights to your PC, you may need to manually install the add-on to the portable version of Blender you downloaded.
-
-Start by un-zipping the MedBlend add-on zip. Once un-zipped, you should have a folder called "medblend" that contains `__init__.py`. Copy the "medblend" folder into your portable Blender add-ons path (for example: "D:\Blender5.0\5.0\scripts\addons\medblend\__init__.py"). Your Blender path may differ.
-
-Load Blender portable by running `Blender.exe`. When you select `Edit > Preferences > Add-ons`, you should find that MedBlend is already installed.
-
-![add_on_install](https://user-images.githubusercontent.com/52724915/226311899-a479f86d-c611-4940-a706-d8814def3533.png)
-
-Enable the add-on if needed. MedBlend will load the bundled `pydicom` wheel from its `wheels/` directory automatically when Blender starts the add-on. No dependency-install button is required.
-
-If you build your own package, make sure the `wheels/` directory is included in the zip so the bundled Python dependency can be found.
+Blender installs the bundled dependency automatically. Open the 3D viewport sidebar with `N`, then select the `Medical` tab.
 
 ## How to use MedBlend
 
@@ -86,20 +56,20 @@ Once installed, open the 3D viewport and select the Medical category from the si
 
 If Blender cannot write temporary VDB files in its default temp location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 
-> **Note on saving .blend files:** Blender volume objects read their voxel data from the VDB file on disk. By default MedBlend writes VDB files to Blender's session temporary directory, which is deleted when Blender exits — so a saved .blend file will lose its volume data on the next reload. If you plan to save your scene, set a persistent `VDB Temp Directory` in the MedBlend preferences first. Files in that directory are never overwritten or cleaned up automatically (each import writes a new uniquely-named file), so clear it out occasionally.
+> **Note on saving .blend files:** Blender volume objects read their voxel data from the VDB file on disk. By default MedBlend writes VDB files to Blender's session temporary directory, which is deleted when Blender exits - so a saved .blend file will lose its volume data on the next reload. If you plan to save your scene, set a persistent `VDB Temp Directory` in the MedBlend preferences first. Files in that directory are never overwritten or cleaned up automatically (each import writes a new uniquely-named file), so clear it out occasionally.
 
 <img width="393" height="349" alt="Screenshot 2026-03-08 at 9 17 49 pm" src="https://github.com/user-attachments/assets/d000dc5a-3752-46c7-a758-292e3ed7b100" />
 
 
 MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
 
--Load DICOM Images, will allow you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. 
+- **Load DICOM Images** allows you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. 
 
--Load DICOM Dose will allow you to import radiation therapy DICOM Dose Files from a treatment planning system and display the dose distribution as a volume in Blender. 
+- **Load DICOM Dose** imports a radiotherapy DICOM dose file and displays the dose distribution as a volume in Blender. 
 
--Load DICOM structures will import a DICOM structure file from a radiation therapy treatment planning system. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
+- **Load DICOM Structures** imports a radiotherapy DICOM structure set. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
 
--Load Proton Plan will import a DICOM RT Ion proton therapy plan file and extract the proton spot positions and weights and display them as spheres with a radius proportional to the relative spot weight. 
+- **Load Proton Plan** imports a DICOM RT Ion plan and displays proton spot positions as spheres with radius proportional to relative spot weight. 
 
 ## How to add Materials to the CT and dose volumes
 
@@ -135,7 +105,7 @@ Start by creating a place-holder object. From the add menu, add a cube into the 
 
 ![add_cube](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/9f842bce-1a6a-4c7d-8334-1a4c86373e0c)
 
-With the cube selected, go to the modifer menu, select Add Modifier and add a Volume to Mesh modifier.
+With the cube selected, go to the modifier menu, select Add Modifier and add a Volume to Mesh modifier.
 ![volume_to_mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/7f940498-9199-4bc3-b13e-75f76834846a)
 
 From the object property, select the CT volume, then adjust the threshold to isolate the tissue you want. Because MedBlend normalises image volumes to `0 - 1`, the threshold lives in that range too - around `0.4` is a good starting point for bone in a typical CT, and lower values pick up soft tissue. Use the `medblend_intensity_min`/`medblend_intensity_max` custom properties on the volume if you need to pick a threshold for a specific HU value.
@@ -164,38 +134,50 @@ A test proton therapy plan on a phantom. The CT images, dose distribution and pr
 
 ## Development
 
-The DICOM parsing and geometry code is covered by a test suite that runs outside Blender - `tests/stubs` provides minimal `bpy`/`mathutils` stand-ins so the modules can be imported by pytest.
+Install the dependencies for the unit tests and run them outside Blender:
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+python -m pip install -r requirements-dev.txt
+python -m pytest
 ```
 
-The suite covers slice ordering and stacking, dose grid geometry, RT structure rasterisation, mask cropping, and the CT co-registration maths. It runs automatically on every push and pull request. Anything that touches Blender's volume, material or object APIs still needs manual verification inside Blender.
+Validate and build the installable extension with Blender's official commands:
+
+```bash
+blender --command extension validate .
+blender --command extension build --source-dir . --output-dir dist
+blender --command extension validate dist/medblend-2.0.0.zip
+```
+
+Upload the archive produced by `extension build` to the Blender Extensions platform. Do not upload the repository or GitHub's generated source archive. GitHub Actions runs the unit tests and builds and validates the extension package for every push and pull request.
 
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
 - Contours are rasterised using an even-odd point-in-polygon test sampled at voxel centres, so a structure boundary is resolved to the nearest voxel. Small structures relative to the CT voxel size will show that quantisation.
 - Imported CT, dose, structure, and proton spot objects are now all placed in the DICOM patient coordinate system (millimetres mapped to metres), so they co-register automatically regardless of import order. Note that the CT volume is therefore no longer centred at the world origin.
 - Proton beam orientation (gantry and couch rotation) assumes a head-first supine (HFS) patient; other patient orientations have not been verified and a warning is shown when the plan reports a different patient position.
-- If bundled dependencies were missing from the installed package, MedBlend will fail to load. Reinstall using the official release zip and ensure the `wheels/` directory is included.
+- If the bundled dependency is missing from the installed package, MedBlend will fail to load. Reinstall using the official extension archive and ensure the `wheels/` directory is included.
 
-Please report any bugs as an issue on this repository
+Please report bugs through [GitHub Issues](https://github.com/drmichaeldouglass/MedBlend/issues).
 
 ## Future Updates
 
-### Import Radaition Therapy Plan Files
+### Import Radiation Therapy Plan Files
 
-Import radaition therapy DICOM plan files to visulise MLC or proton spot positions in the patient CT
+Import radiation therapy DICOM plan files to visualise MLC or proton spot positions in the patient CT
 
 ### Import Brachytherapy Dwell Points
 
-Visulise brachytherapy dwell point positions and dwell times
+Visualise brachytherapy dwell point positions and dwell times
 
 ### Treatment simulation with Linac model.
 
 
-## How to Cite
+## License
+
+MedBlend is released under the [GNU General Public License v3.0 or later](LICENSE). The bundled `pydicom` wheel remains under its upstream licence; see [Third-party notices](THIRD_PARTY_NOTICES.md).
+
+## How to cite
 
 MedBlend: A Medical Visualisation Add-On for Blender, M.Douglass
 https://github.com/drmichaeldouglass/MedBlend
