@@ -42,7 +42,8 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
         pass
 
     image_slices: list[pydicom.Dataset] = []
-    for file_path in directory_path.iterdir():
+    seen_sop_uids: set[str] = set()
+    for file_path in sorted(directory_path.iterdir()):
         if not file_path.is_file():
             continue
         try:
@@ -53,12 +54,18 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
             continue
         if referenced_series_uid and getattr(ds, "SeriesInstanceUID", None) != referenced_series_uid:
             continue
-        if referenced_sop_uids:
-            sop_uid = str(getattr(ds, "SOPInstanceUID", ""))
-            if sop_uid and sop_uid not in referenced_sop_uids:
-                continue
+        sop_uid = str(getattr(ds, "SOPInstanceUID", ""))
+        if referenced_sop_uids and sop_uid and sop_uid not in referenced_sop_uids:
+            continue
         if not hasattr(ds, "ImagePositionPatient") or not hasattr(ds, "ImageOrientationPatient"):
             continue
+        # Copies of the same slice (``IMG1.dcm`` and ``IMG1 (1).dcm``) would
+        # otherwise inflate the slice count and allocate a mask grid deeper
+        # than the series, the same way load_dicom_series guards the CT path.
+        if sop_uid:
+            if sop_uid in seen_sop_uids:
+                continue
+            seen_sop_uids.add(sop_uid)
         image_slices.append(ds)
 
     return image_slices
@@ -275,43 +282,54 @@ def _get_structure_frame_uid(dicom_structure: pydicom.Dataset) -> str:
 
 
 def _polygon_mask(shape: tuple[int, int], polygon_rc: np.ndarray) -> np.ndarray:
+    """Rasterise a closed polygon with the even-odd rule.
+
+    Scanline based: an edge can only affect the rows it spans, so each row
+    solves for its own crossings and fills by parity. Testing every edge
+    against the whole bounding box instead costs O(edges x box area), which
+    on a body/external contour (a near-full 512x512 box with hundreds of
+    points) took over a second per slice and minutes per ROI.
+    """
+
     rows, cols = shape
     if polygon_rc.shape[0] < 3:
         return np.zeros(shape, dtype=bool)
 
-    poly_r = polygon_rc[:, 0]
-    poly_c = polygon_rc[:, 1]
+    poly_r = np.asarray(polygon_rc[:, 0], dtype=float)
+    poly_c = np.asarray(polygon_rc[:, 1], dtype=float)
 
     min_r = max(int(np.floor(np.min(poly_r))), 0)
     max_r = min(int(np.ceil(np.max(poly_r))), rows - 1)
     min_c = max(int(np.floor(np.min(poly_c))), 0)
     max_c = min(int(np.ceil(np.max(poly_c))), cols - 1)
+    mask = np.zeros(shape, dtype=bool)
     if min_r > max_r or min_c > max_c:
-        return np.zeros(shape, dtype=bool)
+        return mask
+
+    # Horizontal edges never cross a scanline and would divide by zero.
+    r1, c1 = poly_r, poly_c
+    r2, c2 = np.roll(poly_r, -1), np.roll(poly_c, -1)
+    spans_rows = r1 != r2
+    r1, c1, r2, c2 = r1[spans_rows], c1[spans_rows], r2[spans_rows], c2[spans_rows]
+    if r1.size == 0:
+        return mask
 
     # Integer indices are voxel centres (ImagePositionPatient references the
     # centre of the first voxel), so sample the polygon at integer coordinates.
-    rr, cc = np.mgrid[min_r : max_r + 1, min_c : max_c + 1]
-    y = rr.astype(float)
-    x = cc.astype(float)
+    x = np.arange(min_c, max_c + 1, dtype=float)
 
-    inside = np.zeros_like(y, dtype=bool)
-    y1 = poly_r
-    x1 = poly_c
-    y2 = np.roll(poly_r, -1)
-    x2 = np.roll(poly_c, -1)
-
-    for edge_index in range(len(poly_r)):
-        yi, yj = y1[edge_index], y2[edge_index]
-        xi, xj = x1[edge_index], x2[edge_index]
-        if yi == yj:
+    for row_index in range(min_r, max_r + 1):
+        y = float(row_index)
+        crossing = (r1 > y) != (r2 > y)
+        if not crossing.any():
             continue
-        intersects = ((yi > y) != (yj > y))
-        x_intersection = (xj - xi) * (y - yi) / (yj - yi) + xi
-        inside ^= intersects & (x < x_intersection)
+        y1, x1 = r1[crossing], c1[crossing]
+        y2, x2 = r2[crossing], c2[crossing]
+        crossings = np.sort((x2 - x1) * (y - y1) / (y2 - y1) + x1)
+        # Inside where an odd number of crossings lies strictly to the right.
+        to_the_right = crossings.size - np.searchsorted(crossings, x, side="right")
+        mask[row_index, min_c : max_c + 1] = (to_the_right % 2) == 1
 
-    mask = np.zeros(shape, dtype=bool)
-    mask[min_r : max_r + 1, min_c : max_c + 1] = inside
     return mask
 
 
@@ -342,20 +360,28 @@ def crop_mask_to_bounds(
     ROI at full grid extent produces hundreds of megabytes of almost-empty
     voxels per ROI. Cropping keeps the geometry identical by moving the origin
     to the patient position of the first retained voxel.
+
+    The bounds come from three one-dimensional reductions rather than
+    ``np.nonzero``, which would materialise three int64 indices per set voxel -
+    more than twice the size of the mask itself on a large ROI.
     """
 
-    occupied = np.nonzero(mask)
     origin = np.asarray(geometry["origin"], dtype=float)
-    if not len(occupied[0]):
+    occupied_slices = np.any(mask, axis=(1, 2))
+    if not occupied_slices.any():
         return mask, origin
 
-    slice_start = int(occupied[0].min())
-    row_start = int(occupied[1].min())
-    col_start = int(occupied[2].min())
+    def _bounds(flags: np.ndarray) -> tuple[int, int]:
+        indices = np.flatnonzero(flags)
+        return int(indices[0]), int(indices[-1])
+
+    slice_start, slice_end = _bounds(occupied_slices)
+    row_start, row_end = _bounds(np.any(mask, axis=(0, 2)))
+    col_start, col_end = _bounds(np.any(mask, axis=(0, 1)))
     cropped = mask[
-        slice_start : int(occupied[0].max()) + 1,
-        row_start : int(occupied[1].max()) + 1,
-        col_start : int(occupied[2].max()) + 1,
+        slice_start : slice_end + 1,
+        row_start : row_end + 1,
+        col_start : col_end + 1,
     ]
 
     # ``basis`` maps [row, col, slice] index offsets to patient millimetres.
@@ -374,6 +400,10 @@ def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
     ``mask`` is ``None`` when an ROI rasterised to nothing. Those are still
     yielded so the caller can report an ROI that was dropped entirely rather
     than letting it vanish from the import silently.
+
+    ``skipped_contours`` counts contours that could not be rasterised at all -
+    either outside the reconstructed slice range, or carrying coordinates that
+    are not finite numbers.
     """
 
     roi_names = {}
@@ -396,14 +426,32 @@ def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
         for contour in getattr(roi_contour, "ContourSequence", []):
             # Only closed planar contours describe filled regions; open
             # contours and single points must not be rasterized as polygons.
-            geometric_type = str(getattr(contour, "ContourGeometricType", "CLOSED_PLANAR")).upper()
+            # The tag is Type 1 but exports do leave it empty, and pydicom then
+            # yields ``None`` - stringifying that gives "NONE", which matches no
+            # known type and used to drop every contour of the ROI in silence.
+            raw_geometric_type = getattr(contour, "ContourGeometricType", None)
+            geometric_type = (
+                str(raw_geometric_type).strip().upper() if raw_geometric_type else "CLOSED_PLANAR"
+            )
             if geometric_type not in {"CLOSED_PLANAR", "CLOSEDPLANAR_XOR"}:
                 continue
-            contour_data = getattr(contour, "ContourData", None)
-            if not contour_data or len(contour_data) < 9 or len(contour_data) % 3 != 0:
+            # A corrupt coordinate would otherwise raise out of the rasteriser
+            # and abandon every ROI still queued behind this one, so count the
+            # contour and step over it instead. pydicom hands back the raw
+            # strings of a malformed DS value rather than floats, so numpy is
+            # where that surfaces.
+            try:
+                contour_data = getattr(contour, "ContourData", None)
+                if not contour_data or len(contour_data) < 9 or len(contour_data) % 3 != 0:
+                    continue
+                points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            if not np.all(np.isfinite(points_xyz)):
+                skipped += 1
                 continue
 
-            points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
             ijk = _contour_points_to_ijk(points_xyz, origin, inv_basis)
 
             slice_index = int(np.rint(np.mean(ijk[:, 2])))
@@ -461,6 +509,10 @@ def load_structures(file_path: Path) -> bool:
     imported_count = 0
     failed_names: list[str] = []
     empty_names: list[str] = []
+    # Collected rather than shown per ROI: a structure set whose volumes cannot
+    # be written (no openvdb, unwritable temp directory) fails for every single
+    # ROI, and one dialog each would bury the scene in popups.
+    write_errors: list[str] = []
     skipped_contours = 0
     fatal_error = None
 
@@ -477,7 +529,9 @@ def load_structures(file_path: Path) -> bool:
             cropped, roi_origin = crop_mask_to_bounds(mask, geometry)
             del mask
 
-            result = write_vdb_volume(cropped, spacing, f"{roi_name}.vdb")
+            result = write_vdb_volume(
+                cropped, spacing, f"{roi_name}.vdb", on_error=write_errors.append
+            )
             if not result:
                 # One unwritable ROI should not discard the ones that worked.
                 failed_names.append(roi_name)
@@ -513,11 +567,14 @@ def load_structures(file_path: Path) -> bool:
         fatal_error = exc
 
     if imported_count == 0:
-        message = (
-            f"Unable to convert RT Structure contours: {fatal_error}"
-            if fatal_error
-            else "No contour masks were generated from this RT Structure Set."
-        )
+        if fatal_error:
+            message = f"Unable to convert RT Structure contours: {fatal_error}"
+        elif write_errors:
+            # Every ROI failed to write; the reason is the same for all of them
+            # and would otherwise be lost now that it is no longer popped up.
+            message = f"No structures could be written. {write_errors[0]}"
+        else:
+            message = "No contour masks were generated from this RT Structure Set."
         show_message_box(message, "Error", "ERROR")
         return False
 
@@ -525,7 +582,10 @@ def load_structures(file_path: Path) -> bool:
     if fatal_error:
         notes.append(f"import stopped early: {fatal_error}")
     if failed_names:
-        notes.append(f"{len(failed_names)} structure(s) could not be written: {', '.join(failed_names[:5])}")
+        note = f"{len(failed_names)} structure(s) could not be written: {', '.join(failed_names[:5])}"
+        if write_errors:
+            note += f" ({write_errors[0]})"
+        notes.append(note)
     if empty_names:
         notes.append(
             f"{len(empty_names)} structure(s) produced no voxels and were skipped: "
@@ -533,7 +593,8 @@ def load_structures(file_path: Path) -> bool:
         )
     if skipped_contours:
         notes.append(
-            f"{skipped_contours} contour(s) fell outside the reconstructed slice range and were skipped"
+            f"{skipped_contours} contour(s) could not be rasterised and were skipped "
+            "(outside the reconstructed slice range, or malformed coordinates)"
         )
     if notes:
         show_message_box(

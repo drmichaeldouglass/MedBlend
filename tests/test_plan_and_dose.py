@@ -8,6 +8,8 @@ import pydicom
 import pytest
 from pydicom.dataset import Dataset
 
+import numpy as np
+
 from MedBlend.dose import dose_grid_spacing
 from MedBlend.plan import (
     RT_ION_PLAN_STORAGE_UID,
@@ -110,6 +112,65 @@ class TestPlanHelpers:
         control_point.IsocenterPosition = None
         matrix = _beam_world_matrix(control_point)
         assert matrix.translation == pytest.approx((0.0, 0.0, 0.0))
+
+
+def beam_axes(gantry: float, couch: float = 0.0):
+    """The (spot_x, spot_y, spot_E) object axes in DICOM patient coordinates."""
+
+    control_point = Dataset()
+    control_point.GantryAngle = gantry
+    control_point.PatientSupportAngle = couch
+    control_point.IsocenterPosition = [0.0, 0.0, 0.0]
+    basis = np.asarray(_beam_world_matrix(control_point).rows)[:3, :3]
+    return basis[:, 0], basis[:, 1], basis[:, 2]
+
+
+def beam_travel_direction(gantry: float, couch: float):
+    """Reference direction of travel for an HFS patient, in DICOM patient mm."""
+
+    g, t = math.radians(gantry), math.radians(couch)
+    return np.array([-math.sin(g) * math.cos(t), math.cos(g), math.sin(g) * math.sin(t)])
+
+
+class TestBeamOrientation:
+    """The node group positions spots at local (spot_x, spot_y, spot_E), so the
+    object's local axes are the IEC 61217 beam axes and must be oriented to the
+    patient. An identity base frame left spot_y running anterior-posterior and
+    pinned the energy axis to the patient's long axis at every gantry angle."""
+
+    def test_gantry_zero_matches_the_iec_beam_frame(self):
+        spot_x, spot_y, spot_e = beam_axes(0.0)
+        assert spot_x == pytest.approx([1.0, 0.0, 0.0], abs=1e-9)   # patient left
+        assert spot_y == pytest.approx([0.0, 0.0, 1.0], abs=1e-9)   # patient superior
+        assert spot_e == pytest.approx([0.0, -1.0, 0.0], abs=1e-9)  # anterior, toward source
+
+    def test_gantry_ninety_is_a_left_lateral_beam(self):
+        _spot_x, spot_y, spot_e = beam_axes(90.0)
+        # Source on the patient's left, and the scan plane still carries the
+        # superior-inferior axis rather than rotating it away.
+        assert spot_e == pytest.approx([1.0, 0.0, 0.0], abs=1e-9)
+        assert spot_y == pytest.approx([0.0, 0.0, 1.0], abs=1e-9)
+
+    @pytest.mark.parametrize(
+        "gantry,couch",
+        [(0, 0), (90, 0), (180, 0), (270, 0), (45, 0), (0, 90), (90, 90), (30, 20)],
+    )
+    def test_energy_axis_points_back_along_the_beam(self, gantry, couch):
+        _spot_x, _spot_y, spot_e = beam_axes(gantry, couch)
+        assert spot_e == pytest.approx(-beam_travel_direction(gantry, couch), abs=1e-9)
+
+    @pytest.mark.parametrize("gantry,couch", [(0, 0), (90, 0), (45, 30), (200, 110)])
+    def test_frame_stays_right_handed(self, gantry, couch):
+        # A mirrored frame would flip the scan spot pattern left-to-right.
+        spot_x, spot_y, spot_e = beam_axes(gantry, couch)
+        assert np.cross(spot_x, spot_y) == pytest.approx(spot_e, abs=1e-9)
+
+    def test_isocentre_translation_is_unaffected(self):
+        control_point = Dataset()
+        control_point.GantryAngle = 37.0
+        control_point.PatientSupportAngle = 12.0
+        control_point.IsocenterPosition = [10.0, -20.0, 300.0]
+        assert _beam_world_matrix(control_point).translation == pytest.approx((0.01, -0.02, 0.3))
 
 
 class TestDoseGridSpacing:

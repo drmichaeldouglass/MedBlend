@@ -60,10 +60,25 @@ def apply_dicom_shader(shader_name: str, obj: Optional[bpy.types.Object] = None)
     return _assign_material(obj if obj is not None else bpy.context.object, material)
 
 
+# Blender truncates datablock names past this length. A truncated name would
+# never match the cache lookup below, so every re-import would copy the
+# material again and the file would accumulate one copy per import.
+_MAX_DATABLOCK_NAME = 63
+
+
+def _rgba(color: Sequence[float]) -> tuple[float, float, float, float]:
+    return (
+        float(color[0]),
+        float(color[1]),
+        float(color[2]),
+        float(color[3]) if len(color) > 3 else 1.0,
+    )
+
+
 def _set_material_color(material: bpy.types.Material, color: Sequence[float]) -> None:
     """Tint a material copy with an RT structure's display colour."""
 
-    rgba = (float(color[0]), float(color[1]), float(color[2]), float(color[3]) if len(color) > 3 else 1.0)
+    rgba = _rgba(color)
     material.diffuse_color = rgba
 
     node_tree = getattr(material, "node_tree", None)
@@ -73,6 +88,23 @@ def _set_material_color(material: bpy.types.Material, color: Sequence[float]) ->
         color_input = node.inputs.get("Color") if hasattr(node, "inputs") else None
         if color_input is not None and getattr(color_input, "type", "") == "RGBA" and not color_input.is_linked:
             color_input.default_value = rgba
+
+
+def _material_has_color(material: bpy.types.Material, rgba: Sequence[float]) -> bool:
+    existing = getattr(material, "diffuse_color", None)
+    if existing is None:
+        return False
+    try:
+        return len(existing) >= 4 and all(
+            abs(float(a) - float(b)) <= 1e-6 for a, b in zip(rgba, existing)
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def _tint_name(base_name: str, counter: int) -> str:
+    suffix = "" if counter == 0 else f"_{counter}"
+    return base_name[: _MAX_DATABLOCK_NAME - len(suffix)] + suffix
 
 
 def apply_structure_material(
@@ -86,6 +118,12 @@ def apply_structure_material(
     Sharing one material across every ROI makes each imported structure render
     identically, so ``ROIDisplayColor`` from the treatment planning system is
     baked into a copy instead.
+
+    A cached tint is only reused when its colour still matches. Two structure
+    sets can use the same ROI name with different display colours, and reusing
+    the datablock on name alone gave the second import the first one's colour -
+    and retinting it in place would have recoloured the structure already in
+    the scene.
     """
 
     base_material = _load_material(shader_name)
@@ -95,15 +133,23 @@ def apply_structure_material(
     if color is None:
         return _assign_material(obj, base_material)
 
-    material_name = f"{shader_name} - {roi_name}"
-    material = bpy.data.materials.get(material_name)
-    if material is None:
-        try:
-            material = base_material.copy()
-            material.name = material_name
-            _set_material_color(material, color)
-        except Exception:
-            material = base_material
+    rgba = _rgba(color)
+    base_name = f"{shader_name} - {roi_name}"
+    material = base_material
+    for counter in range(100):
+        candidate = _tint_name(base_name, counter)
+        existing = bpy.data.materials.get(candidate)
+        if existing is None:
+            try:
+                material = base_material.copy()
+                material.name = candidate
+                _set_material_color(material, rgba)
+            except Exception:
+                material = base_material
+            break
+        if _material_has_color(existing, rgba):
+            material = existing
+            break
 
     return _assign_material(obj, material)
 

@@ -63,13 +63,36 @@ def _patient_position(dataset: pydicom.Dataset) -> str:
     return ""
 
 
+# The Proton_Spots node group places each spot at the object-local position
+# (spot_x, spot_y, spot_E), so the object's local axes are the IEC 61217 beam
+# limiting device axes. For a head-first supine patient at gantry and couch
+# zero those map into DICOM patient coordinates as:
+#
+#     X_b (spot_x) -> +X   patient left
+#     Y_b (spot_y) -> +Z   patient superior
+#     Z_b (spot_E) -> -Y   patient anterior, back towards the source
+#
+# which is a +90 degree rotation about X. Leaving it out - as an identity base
+# frame does - puts the spot plane in the DICOM XY plane, so spot_y runs
+# anterior-posterior instead of superior-inferior, and the gantry rotation
+# about +Z never moves the beam axis off the patient's long axis at all.
+IEC_BEAM_TO_DICOM = Matrix.Rotation(math.radians(90.0), 4, "X")
+
+
 def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
     """Build the beam object's world matrix in DICOM patient coordinates.
 
-    Assumes a head-first supine (HFS) patient: the IEC gantry rotation axis is
-    the patient superior-inferior axis (DICOM +Z), and the couch
-    (PatientSupportAngle) rotates the beam about the room-vertical axis, which
-    maps to the patient +Y axis in this convention.
+    Assumes a head-first supine (HFS) patient. The IEC gantry rotation axis is
+    then the patient superior-inferior axis (DICOM +Z), and the couch
+    (PatientSupportAngle) turns the beam about the room-vertical axis, which
+    lies along DICOM Y. Composing couch after gantry reproduces the standard
+    beam direction of travel ``(-sinG cosT, cosG, sinG sinT)``: gantry 0 enters
+    anteriorly and gantry 90 is a left lateral beam.
+
+    ``spot_E`` is stacked along +Z_b, so higher energy layers are drawn further
+    back towards the source rather than deeper into the patient. That is the
+    existing depiction, kept as-is; the sign of the attribute is what would
+    change it, not this matrix.
     """
 
     gantry_angle = float_or(getattr(control_point, "GantryAngle", None), 0.0)
@@ -81,8 +104,10 @@ def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
     if len(iso_center) != 3:
         iso_center = (0.0, 0.0, 0.0)
 
-    rotation = Matrix.Rotation(math.radians(couch_angle), 4, "Y") @ Matrix.Rotation(
-        math.radians(gantry_angle), 4, "Z"
+    rotation = (
+        Matrix.Rotation(math.radians(couch_angle), 4, "Y")
+        @ Matrix.Rotation(math.radians(gantry_angle), 4, "Z")
+        @ IEC_BEAM_TO_DICOM
     )
     return Matrix.Translation(iso_center) @ rotation
 
