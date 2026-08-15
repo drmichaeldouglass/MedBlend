@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 import bpy
 import numpy as np
@@ -247,42 +247,41 @@ def write_vdb_volume(
     array,
     spacing: Sequence[float],
     target_name: str,
+    on_error: Optional[Callable[[str], None]] = None,
 ) -> Optional[Tuple[Path, bpy.types.Object]]:
+    """Write ``array`` to a VDB file and return ``(path, imported object)``.
+
+    ``on_error`` receives the failure message instead of a popup being shown.
+    A caller importing many volumes in a loop - one per ROI of a structure set
+    - can then collect the failures and report them once, rather than stacking
+    a separate dialog for every ROI that failed.
+    """
+
+    def fail(message: str, title: str = "Error") -> None:
+        if on_error is not None:
+            on_error(message)
+        else:
+            show_message_box(message, title, "ERROR")
+        return None
+
     if len(spacing) != 3:
-        show_message_box(
-            f"Expected 3 spacing values (x, y, z), got {len(spacing)}.",
-            "Error",
-            "ERROR",
-        )
-        return None
+        return fail(f"Expected 3 spacing values (x, y, z), got {len(spacing)}.")
     if any(value <= 0 for value in spacing):
-        show_message_box(
-            "Spacing values must be positive to create a VDB volume.",
-            "Error",
-            "ERROR",
-        )
-        return None
+        return fail("Spacing values must be positive to create a VDB volume.")
 
     # FloatGrid stores single precision; converting up front halves peak memory
     # and avoids dtype-strict copyFromArray builds rejecting float64.
     try:
         voxels = np.ascontiguousarray(array, dtype=np.float32)
     except Exception as exc:
-        show_message_box(f"Voxel data could not be converted for VDB export: {exc}", "Error", "ERROR")
-        return None
+        return fail(f"Voxel data could not be converted for VDB export: {exc}")
     if voxels.ndim != 3 or voxels.size == 0:
-        show_message_box(
-            f"Expected a non-empty 3D voxel array, got shape {tuple(voxels.shape)}.",
-            "Error",
-            "ERROR",
-        )
-        return None
+        return fail(f"Expected a non-empty 3D voxel array, got shape {tuple(voxels.shape)}.")
 
     try:
         openvdb = _import_openvdb_module()
     except Exception as exc:
-        show_message_box(f"openvdb is not available: {exc}", "Missing Dependency", "ERROR")
-        return None
+        return fail(f"openvdb is not available: {exc}", "Missing Dependency")
 
     try:
         grid = openvdb.FloatGrid()
@@ -315,5 +314,4 @@ def write_vdb_volume(
 
         return output_path, imported_obj
     except Exception as exc:
-        show_message_box(f"Failed to create VDB volume: {exc}", "Error", "ERROR")
-        return None
+        return fail(f"Failed to create VDB volume: {exc}")

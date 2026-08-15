@@ -400,6 +400,10 @@ def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
     ``mask`` is ``None`` when an ROI rasterised to nothing. Those are still
     yielded so the caller can report an ROI that was dropped entirely rather
     than letting it vanish from the import silently.
+
+    ``skipped_contours`` counts contours that could not be rasterised at all -
+    either outside the reconstructed slice range, or carrying coordinates that
+    are not finite numbers.
     """
 
     roi_names = {}
@@ -431,11 +435,23 @@ def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
             )
             if geometric_type not in {"CLOSED_PLANAR", "CLOSEDPLANAR_XOR"}:
                 continue
-            contour_data = getattr(contour, "ContourData", None)
-            if not contour_data or len(contour_data) < 9 or len(contour_data) % 3 != 0:
+            # A corrupt coordinate would otherwise raise out of the rasteriser
+            # and abandon every ROI still queued behind this one, so count the
+            # contour and step over it instead. pydicom hands back the raw
+            # strings of a malformed DS value rather than floats, so numpy is
+            # where that surfaces.
+            try:
+                contour_data = getattr(contour, "ContourData", None)
+                if not contour_data or len(contour_data) < 9 or len(contour_data) % 3 != 0:
+                    continue
+                points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            if not np.all(np.isfinite(points_xyz)):
+                skipped += 1
                 continue
 
-            points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
             ijk = _contour_points_to_ijk(points_xyz, origin, inv_basis)
 
             slice_index = int(np.rint(np.mean(ijk[:, 2])))
@@ -493,6 +509,10 @@ def load_structures(file_path: Path) -> bool:
     imported_count = 0
     failed_names: list[str] = []
     empty_names: list[str] = []
+    # Collected rather than shown per ROI: a structure set whose volumes cannot
+    # be written (no openvdb, unwritable temp directory) fails for every single
+    # ROI, and one dialog each would bury the scene in popups.
+    write_errors: list[str] = []
     skipped_contours = 0
     fatal_error = None
 
@@ -509,7 +529,9 @@ def load_structures(file_path: Path) -> bool:
             cropped, roi_origin = crop_mask_to_bounds(mask, geometry)
             del mask
 
-            result = write_vdb_volume(cropped, spacing, f"{roi_name}.vdb")
+            result = write_vdb_volume(
+                cropped, spacing, f"{roi_name}.vdb", on_error=write_errors.append
+            )
             if not result:
                 # One unwritable ROI should not discard the ones that worked.
                 failed_names.append(roi_name)
@@ -545,11 +567,14 @@ def load_structures(file_path: Path) -> bool:
         fatal_error = exc
 
     if imported_count == 0:
-        message = (
-            f"Unable to convert RT Structure contours: {fatal_error}"
-            if fatal_error
-            else "No contour masks were generated from this RT Structure Set."
-        )
+        if fatal_error:
+            message = f"Unable to convert RT Structure contours: {fatal_error}"
+        elif write_errors:
+            # Every ROI failed to write; the reason is the same for all of them
+            # and would otherwise be lost now that it is no longer popped up.
+            message = f"No structures could be written. {write_errors[0]}"
+        else:
+            message = "No contour masks were generated from this RT Structure Set."
         show_message_box(message, "Error", "ERROR")
         return False
 
@@ -557,7 +582,10 @@ def load_structures(file_path: Path) -> bool:
     if fatal_error:
         notes.append(f"import stopped early: {fatal_error}")
     if failed_names:
-        notes.append(f"{len(failed_names)} structure(s) could not be written: {', '.join(failed_names[:5])}")
+        note = f"{len(failed_names)} structure(s) could not be written: {', '.join(failed_names[:5])}"
+        if write_errors:
+            note += f" ({write_errors[0]})"
+        notes.append(note)
     if empty_names:
         notes.append(
             f"{len(empty_names)} structure(s) produced no voxels and were skipped: "
@@ -565,7 +593,8 @@ def load_structures(file_path: Path) -> bool:
         )
     if skipped_contours:
         notes.append(
-            f"{skipped_contours} contour(s) fell outside the reconstructed slice range and were skipped"
+            f"{skipped_contours} contour(s) could not be rasterised and were skipped "
+            "(outside the reconstructed slice range, or malformed coordinates)"
         )
     if notes:
         show_message_box(

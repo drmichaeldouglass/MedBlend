@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pydicom.dataelem import RawDataElement
 from pydicom.dataset import Dataset
+from pydicom.tag import Tag
 
 from MedBlend.structure import (
     _build_geometry,
@@ -261,6 +263,38 @@ class TestIterRoiMasks:
         assert mask is not None
         assert np.array_equal(mask, baseline)
         assert skipped == 0
+
+    @pytest.mark.parametrize("bad_z", [float("nan"), float("inf")])
+    def test_malformed_contour_is_skipped_not_fatal(self, bad_z):
+        # Non-finite coordinates used to raise out of the rasteriser and
+        # abandon every ROI still queued behind this one.
+        structure = make_structure_set()
+        broken = Dataset()
+        broken.ContourGeometricType = "CLOSED_PLANAR"
+        broken.ContourData = [4.0, 4.0, bad_z, 4.0, 12.0, bad_z, 12.0, 12.0, bad_z]
+        structure.ROIContourSequence[0].ContourSequence.insert(0, broken)
+
+        name, mask, _color, skipped = next(iter(iter_roi_masks(structure, build_reference_geometry())))
+        assert name == "Target"
+        assert skipped == 1
+        # The two good contours behind it still rasterised.
+        _n, baseline, _c, _s = next(iter(iter_roi_masks(make_structure_set(), build_reference_geometry())))
+        assert np.array_equal(mask, baseline)
+
+    def test_non_numeric_contour_data_is_skipped(self):
+        # A malformed DS in a real file reaches Python as raw strings rather
+        # than floats, so the failure lands in the numpy conversion.
+        structure = make_structure_set()
+        broken = Dataset()
+        broken.ContourGeometricType = "CLOSED_PLANAR"
+        broken[0x30060050] = RawDataElement(
+            Tag(0x30060050), "DS", 35, b"1.0\\abc\\3.0\\1.0\\2.0\\3.0\\1.0\\2.0\\3.0", 0, True, True
+        )
+        structure.ROIContourSequence[0].ContourSequence.append(broken)
+
+        _name, mask, _color, skipped = next(iter(iter_roi_masks(structure, build_reference_geometry())))
+        assert mask is not None and mask.any()
+        assert skipped == 1
 
     def test_padded_geometric_type_is_accepted(self):
         structure = make_structure_set()
