@@ -32,26 +32,57 @@ def dose_grid_spacing(dataset: pydicom.Dataset) -> tuple[list[float], float]:
     row_spacing = positive_float_or(pixel_spacing[0] if len(pixel_spacing) > 0 else None, 1.0)
     col_spacing = positive_float_or(pixel_spacing[1] if len(pixel_spacing) > 1 else None, 1.0)
 
+    raw_offsets = getattr(dataset, "GridFrameOffsetVector", None) or []
     try:
-        offsets = np.asarray(
-            [float_or(value, 0.0) for value in (getattr(dataset, "GridFrameOffsetVector", None) or [])],
-            dtype=float,
-        )
-    except Exception:
-        offsets = np.asarray([], dtype=float)
+        offsets = np.asarray([float(value) for value in raw_offsets], dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("GridFrameOffsetVector contains a non-numeric value.") from exc
+
+    if offsets.size and not np.all(np.isfinite(offsets)):
+        raise ValueError("GridFrameOffsetVector contains a non-finite value.")
 
     signed_slice_step = None
     slice_spacing = positive_float_or(getattr(dataset, "SliceThickness", None), 1.0)
     if offsets.size >= 2:
         offset_deltas = np.diff(offsets)
-        non_zero = np.abs(offset_deltas) > 1e-6
-        if np.any(non_zero):
-            signed_slice_step = float(np.median(offset_deltas[non_zero]))
-            slice_spacing = float(abs(signed_slice_step))
+        if np.any(np.abs(offset_deltas) <= 1e-6):
+            raise ValueError("GridFrameOffsetVector contains duplicate dose plane positions.")
+        if np.any(np.sign(offset_deltas) != np.sign(offset_deltas[0])):
+            raise ValueError("GridFrameOffsetVector is not monotonic.")
+
+        signed_slice_step = float(np.median(offset_deltas))
+        if not np.allclose(offset_deltas, signed_slice_step, rtol=1e-4, atol=1e-3):
+            spacing_text = ", ".join(f"{value:.3g}" for value in offset_deltas[:6])
+            if len(offset_deltas) > 6:
+                spacing_text += ", ..."
+            raise ValueError(
+                "Dose plane spacing is non-uniform "
+                f"({spacing_text} mm). MedBlend cannot represent non-uniform "
+                "GridFrameOffsetVector positions in a linearly transformed VDB volume."
+            )
+        slice_spacing = float(abs(signed_slice_step))
     if signed_slice_step is None:
         signed_slice_step = slice_spacing
 
     return [slice_spacing, row_spacing, col_spacing], signed_slice_step
+
+
+def dose_grid_scaling(dataset: pydicom.Dataset) -> float:
+    """Return a finite, positive DoseGridScaling value.
+
+    DoseGridScaling is required whenever RT Dose pixel data is present. A
+    fabricated default can turn stored integers into plausible-looking but
+    numerically incorrect doses, so malformed files are rejected instead.
+    """
+
+    raw_scaling = getattr(dataset, "DoseGridScaling", None)
+    try:
+        scaling = float(raw_scaling)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("DoseGridScaling is missing or non-numeric.") from exc
+    if not np.isfinite(scaling) or scaling <= 0:
+        raise ValueError("DoseGridScaling must be finite and greater than zero.")
+    return scaling
 
 
 def load_dose(file_path: Path) -> bool:
@@ -71,20 +102,31 @@ def load_dose(file_path: Path) -> bool:
         show_message_box(f"Unable to parse dose grid: {exc}", "Error", "ERROR")
         return False
 
-    dose_resolution, signed_slice_step = dose_grid_spacing(dataset)
+    try:
+        dose_resolution, signed_slice_step = dose_grid_spacing(dataset)
+        dose_grid_scale = dose_grid_scaling(dataset)
+    except ValueError as exc:
+        show_message_box(str(exc), "Error", "ERROR")
+        return False
     slice_spacing, row_spacing, col_spacing = dose_resolution
 
     dose_matrix = np.asarray(pixel_data, dtype=np.float32)
-    dose_grid_scaling = float_or(getattr(dataset, "DoseGridScaling", None), 1.0)
-    if dose_grid_scaling <= 0:
-        show_message_box("DoseGridScaling is invalid; expected a positive value.", "Error", "ERROR")
-        return False
-    dose_matrix = dose_matrix * np.float32(dose_grid_scaling)
+    dose_matrix = dose_matrix * np.float32(dose_grid_scale)
     if dose_matrix.ndim == 2:
         dose_matrix = dose_matrix[np.newaxis, ...]
     elif dose_matrix.ndim != 3:
         show_message_box(
             f"Unsupported dose grid with {dose_matrix.ndim} dimensions; expected a 2D or 3D grid.",
+            "Error",
+            "ERROR",
+        )
+        return False
+
+    raw_offsets = getattr(dataset, "GridFrameOffsetVector", None) or []
+    if dose_matrix.shape[0] > 1 and len(raw_offsets) != dose_matrix.shape[0]:
+        show_message_box(
+            "GridFrameOffsetVector must contain one position for every dose plane "
+            f"({len(raw_offsets)} offsets for {dose_matrix.shape[0]} planes).",
             "Error",
             "ERROR",
         )

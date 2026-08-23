@@ -53,6 +53,62 @@ def _as_float_list(values) -> list[float]:
     return [float(values)]
 
 
+def _spot_control_point_data(
+    control_point: pydicom.Dataset,
+) -> tuple[list[float], list[float], float]:
+    """Validate and return spot positions, weights and nominal energy.
+
+    Malformed values are isolated to their control point so one bad energy
+    layer does not abort beams that have already imported or prevent later
+    valid layers from being processed.
+    """
+
+    try:
+        positions = _as_float_list(getattr(control_point, "ScanSpotPositionMap", None))
+        weights = _as_float_list(getattr(control_point, "ScanSpotMetersetWeights", None))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("spot positions or weights contain a non-numeric value") from exc
+
+    if not positions or not weights:
+        raise ValueError("spot positions or weights are missing")
+    if len(positions) % 2 != 0:
+        raise ValueError("the spot position map contains an odd number of values")
+
+    spot_count = len(positions) // 2
+    if len(weights) != spot_count:
+        raise ValueError(
+            f"the position map contains {spot_count} spots but {len(weights)} weights"
+        )
+
+    declared_count = getattr(control_point, "NumberOfScanSpotPositions", None)
+    if declared_count not in (None, ""):
+        try:
+            declared_count = int(declared_count)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("NumberOfScanSpotPositions is non-numeric") from exc
+        if declared_count != spot_count:
+            raise ValueError(
+                f"NumberOfScanSpotPositions is {declared_count}, but the position map "
+                f"contains {spot_count} spots"
+            )
+
+    raw_energy = getattr(control_point, "NominalBeamEnergy", None)
+    try:
+        nominal_energy_mev = float(raw_energy)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("NominalBeamEnergy is missing or non-numeric") from exc
+
+    numeric_values = positions + weights + [nominal_energy_mev]
+    if not all(math.isfinite(value) for value in numeric_values):
+        raise ValueError("spot positions, weights and energy must all be finite")
+    if nominal_energy_mev <= 0:
+        raise ValueError("NominalBeamEnergy must be greater than zero")
+    if any(weight < 0 for weight in weights):
+        raise ValueError("spot meterset weights cannot be negative")
+
+    return positions, weights, nominal_energy_mev / 1000.0
+
+
 def _patient_position(dataset: pydicom.Dataset) -> str:
     try:
         setups = getattr(dataset, "PatientSetupSequence", [])
@@ -154,27 +210,15 @@ def load_proton_plan(file_path: Path) -> bool:
         # of a pair only carries cumulative meterset bookkeeping.
         for idx in range(0, num_control_points, 2):
             control_point = control_points[idx]
-            positions = _as_float_list(getattr(control_point, "ScanSpotPositionMap", None))
-            weights = _as_float_list(getattr(control_point, "ScanSpotMetersetWeights", None))
-            if not positions or not weights:
+            try:
+                positions, weights, nominal_energy = _spot_control_point_data(control_point)
+            except ValueError as exc:
                 warnings.append(
-                    f"Beam {beam_index} control point {idx} is missing spot positions or weights."
-                )
-                continue
-            if len(positions) % 2 != 0:
-                warnings.append(
-                    f"Beam {beam_index} control point {idx} has an odd number of spot positions."
+                    f"Beam {beam_index} control point {idx} was skipped: {exc}."
                 )
                 continue
 
-            spot_count = len(positions) // 2
-            if len(weights) < spot_count:
-                warnings.append(
-                    f"Beam {beam_index} control point {idx} has fewer weights than positions."
-                )
-                continue
-
-            nominal_energy = float(getattr(control_point, "NominalBeamEnergy", 0.0) or 0.0) / 1000.0
+            spot_count = len(weights)
             for spot_index in range(spot_count):
                 pos_index = spot_index * 2
                 x_vals.append(positions[pos_index] / 1000.0)

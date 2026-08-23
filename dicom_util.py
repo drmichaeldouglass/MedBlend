@@ -158,17 +158,32 @@ def _compute_slice_spacing(
     try:
         positions = np.asarray(slice_positions, dtype=float)
         orientation = np.asarray(image_orientation, dtype=float)
-        if positions.ndim == 2 and positions.shape[1] == 3 and len(positions) >= 2 and orientation.size == 6:
-            normal = np.cross(orientation[:3], orientation[3:])
-            norm = float(np.linalg.norm(normal))
-            if norm > 0:
-                projections = positions @ (normal / norm)
-                deltas = np.diff(projections)
-                non_zero = np.abs(deltas) > 1e-6
-                if np.any(non_zero):
-                    return float(np.median(np.abs(deltas[non_zero])))
-    except Exception:
-        pass
+    except (TypeError, ValueError):
+        positions = np.asarray([])
+        orientation = np.asarray([])
+
+    if positions.ndim == 2 and positions.shape[1] == 3 and len(positions) >= 2 and orientation.size == 6:
+        normal = np.cross(orientation[:3], orientation[3:])
+        norm = float(np.linalg.norm(normal))
+        if norm > 0:
+            projections = positions @ (normal / norm)
+            deltas = np.abs(np.diff(projections))
+            if not np.all(np.isfinite(deltas)) or np.any(deltas <= 1e-6):
+                raise ValueError(
+                    "CT/MR slices contain duplicate or invalid ImagePositionPatient values."
+                )
+
+            slice_spacing = float(np.median(deltas))
+            if not np.allclose(deltas, slice_spacing, rtol=1e-4, atol=1e-3):
+                positions_text = ", ".join(f"{value:.3g}" for value in deltas[:6])
+                if len(deltas) > 6:
+                    positions_text += ", ..."
+                raise ValueError(
+                    "CT/MR slice spacing is non-uniform "
+                    f"({positions_text} mm). MedBlend cannot represent non-uniform "
+                    "slice positions in a linearly transformed VDB volume."
+                )
+            return slice_spacing
 
     return positive_float_or(fallback_thickness, 1.0)
 

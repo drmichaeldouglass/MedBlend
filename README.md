@@ -153,6 +153,9 @@ Upload the archive produced by `extension build` to the Blender Extensions platf
 
 ## Known Issues
 - Not tested on MRI, SPECT, PET or other imaging modalities.
+- CT/MR series and RT Dose grids must have uniform slice/plane spacing. MedBlend
+  rejects non-uniform or duplicate positions because a single OpenVDB volume
+  cannot preserve them without resampling.
 - Contours are rasterised using an even-odd point-in-polygon test sampled at voxel centres, so a structure boundary is resolved to the nearest voxel. Small structures relative to the CT voxel size will show that quantisation.
 - Imported CT, dose, structure, and proton spot objects are now all placed in the DICOM patient coordinate system (millimetres mapped to metres), so they co-register automatically regardless of import order. Note that the CT volume is therefore no longer centred at the world origin.
 - Proton beam orientation (gantry and couch rotation) assumes a head-first supine (HFS) patient; other patient orientations have not been verified and a warning is shown when the plan reports a different patient position.
