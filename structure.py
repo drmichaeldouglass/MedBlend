@@ -19,7 +19,7 @@ from .volume_utils import (
 
 
 def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.Dataset) -> list[pydicom.Dataset]:
-    referenced_series_uid = None
+    referenced_series_uids: set[str] = set()
     referenced_sop_uids: set[str] = set()
 
     try:
@@ -30,8 +30,8 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
                 rt_series_refs = getattr(study_ref, "RTReferencedSeriesSequence", [])
                 for series_ref in rt_series_refs:
                     series_uid = getattr(series_ref, "SeriesInstanceUID", None)
-                    if series_uid and not referenced_series_uid:
-                        referenced_series_uid = series_uid
+                    if series_uid:
+                        referenced_series_uids.add(str(series_uid))
                     contour_images = getattr(series_ref, "ContourImageSequence", [])
                     for contour_image in contour_images:
                         sop_uid = getattr(contour_image, "ReferencedSOPInstanceUID", None)
@@ -41,7 +41,18 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
         # Fall back to modality/series matching when reference metadata is incomplete.
         pass
 
-    image_slices: list[pydicom.Dataset] = []
+    # Some exporters omit the series-level ContourImageSequence but retain the
+    # image references on each individual contour. Use those references to
+    # resolve the series rather than treating every CT/MR in the folder as one
+    # image stack.
+    for roi_contour in getattr(dicom_structure, "ROIContourSequence", []):
+        for contour in getattr(roi_contour, "ContourSequence", []):
+            for contour_image in getattr(contour, "ContourImageSequence", []):
+                sop_uid = getattr(contour_image, "ReferencedSOPInstanceUID", None)
+                if sop_uid:
+                    referenced_sop_uids.add(str(sop_uid))
+
+    candidates: list[pydicom.Dataset] = []
     seen_sop_uids: set[str] = set()
     for file_path in sorted(directory_path.iterdir()):
         if not file_path.is_file():
@@ -52,11 +63,7 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
             continue
         if not check_dicom_image_type(ds):
             continue
-        if referenced_series_uid and getattr(ds, "SeriesInstanceUID", None) != referenced_series_uid:
-            continue
         sop_uid = str(getattr(ds, "SOPInstanceUID", ""))
-        if referenced_sop_uids and sop_uid and sop_uid not in referenced_sop_uids:
-            continue
         if not hasattr(ds, "ImagePositionPatient") or not hasattr(ds, "ImageOrientationPatient"):
             continue
         # Copies of the same slice (``IMG1.dcm`` and ``IMG1 (1).dcm``) would
@@ -66,9 +73,50 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
             if sop_uid in seen_sop_uids:
                 continue
             seen_sop_uids.add(sop_uid)
-        image_slices.append(ds)
+        candidates.append(ds)
 
-    return image_slices
+    if len(referenced_series_uids) > 1:
+        raise ValueError(
+            "The RT Structure Set explicitly references multiple CT/MR series."
+        )
+    if referenced_series_uids:
+        referenced_series_uid = next(iter(referenced_series_uids))
+        return [
+            ds
+            for ds in candidates
+            if str(getattr(ds, "SeriesInstanceUID", "")) == referenced_series_uid
+        ]
+
+    if referenced_sop_uids:
+        referenced_series = {
+            str(getattr(ds, "SeriesInstanceUID", ""))
+            for ds in candidates
+            if str(getattr(ds, "SOPInstanceUID", "")) in referenced_sop_uids
+        }
+        referenced_series.discard("")
+        if len(referenced_series) > 1:
+            raise ValueError(
+                "The RT Structure Set references images from multiple CT/MR series."
+            )
+        if len(referenced_series) == 1:
+            selected_uid = next(iter(referenced_series))
+            return [
+                ds
+                for ds in candidates
+                if str(getattr(ds, "SeriesInstanceUID", "")) == selected_uid
+            ]
+        return []
+
+    series_uids = {str(getattr(ds, "SeriesInstanceUID", "")) for ds in candidates}
+    if len(series_uids) > 1:
+        raise ValueError(
+            "The RT Structure Set does not identify its reference image series, "
+            "and multiple CT/MR series are present in the selected directory."
+        )
+    if series_uids == {""}:
+        return []
+
+    return candidates
 
 
 def _build_geometry(image_slices: list[pydicom.Dataset]):
@@ -106,9 +154,20 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
     slice_spacing = fallback_thickness
     if len(sorted_projections) > 1:
         deltas = np.diff(np.asarray(sorted_projections))
-        non_zero = np.abs(deltas) > 1e-6
-        if np.any(non_zero):
-            slice_spacing = float(np.median(np.abs(deltas[non_zero])))
+        if not np.all(np.isfinite(deltas)) or np.any(np.abs(deltas) <= 1e-6):
+            raise ValueError(
+                "Referenced CT/MR slices contain duplicate or invalid positions."
+            )
+        slice_spacing = float(np.median(np.abs(deltas)))
+        if not np.allclose(np.abs(deltas), slice_spacing, rtol=1e-4, atol=1e-3):
+            spacing_text = ", ".join(f"{value:.3g}" for value in np.abs(deltas[:6]))
+            if len(deltas) > 6:
+                spacing_text += ", ..."
+            raise ValueError(
+                "Referenced CT/MR slice spacing is non-uniform "
+                f"({spacing_text} mm). MedBlend cannot rasterise structures onto "
+                "a linearly transformed VDB grid without resampling."
+            )
     if slice_spacing <= 0:
         slice_spacing = 1.0
 

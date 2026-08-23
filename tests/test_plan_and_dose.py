@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pydicom
 import pytest
@@ -10,12 +11,13 @@ from pydicom.dataset import Dataset
 
 import numpy as np
 
-from MedBlend.dose import dose_grid_spacing
+from MedBlend.dose import dose_grid_scaling, dose_grid_spacing
 from MedBlend.plan import (
     RT_ION_PLAN_STORAGE_UID,
     _as_float_list,
     _beam_world_matrix,
     _patient_position,
+    _spot_control_point_data,
     is_proton_plan,
 )
 
@@ -81,6 +83,41 @@ class TestPlanHelpers:
 
     def test_patient_position_missing_is_blank(self):
         assert _patient_position(Dataset()) == ""
+
+    def test_spot_control_point_data_validates_and_scales_energy(self):
+        control_point = Dataset()
+        control_point.ScanSpotPositionMap = [1.0, 2.0, -3.0, 4.0]
+        control_point.ScanSpotMetersetWeights = [0.25, 0.75]
+        control_point.NumberOfScanSpotPositions = 2
+        control_point.NominalBeamEnergy = 150.0
+
+        positions, weights, energy = _spot_control_point_data(control_point)
+        assert positions == pytest.approx([1.0, 2.0, -3.0, 4.0])
+        assert weights == pytest.approx([0.25, 0.75])
+        assert energy == pytest.approx(0.15)
+
+    def test_spot_control_point_rejects_nonfinite_values(self):
+        control_point = Dataset()
+        control_point.ScanSpotPositionMap = [float("nan"), 2.0]
+        control_point.ScanSpotMetersetWeights = [1.0]
+        control_point.NominalBeamEnergy = 150.0
+        with pytest.raises(ValueError, match="must all be finite"):
+            _spot_control_point_data(control_point)
+
+    def test_spot_control_point_rejects_mismatched_counts(self):
+        control_point = Dataset()
+        control_point.ScanSpotPositionMap = [1.0, 2.0, 3.0, 4.0]
+        control_point.ScanSpotMetersetWeights = [1.0]
+        control_point.NominalBeamEnergy = 150.0
+        with pytest.raises(ValueError, match="2 spots but 1 weights"):
+            _spot_control_point_data(control_point)
+
+    def test_spot_control_point_rejects_missing_energy(self):
+        control_point = Dataset()
+        control_point.ScanSpotPositionMap = [1.0, 2.0]
+        control_point.ScanSpotMetersetWeights = [1.0]
+        with pytest.raises(ValueError, match="NominalBeamEnergy is missing"):
+            _spot_control_point_data(control_point)
 
     def test_beam_matrix_places_isocentre_in_metres(self):
         control_point = Dataset()
@@ -207,9 +244,9 @@ class TestDoseGridSpacing:
         spacing, _ = dose_grid_spacing(self._dose(GridFrameOffsetVector=[0.0], SliceThickness=5.0))
         assert spacing[0] == pytest.approx(5.0)
 
-    def test_constant_offsets_fall_back_to_slice_thickness(self):
-        spacing, _ = dose_grid_spacing(self._dose(GridFrameOffsetVector=[0.0, 0.0], SliceThickness=2.0))
-        assert spacing[0] == pytest.approx(2.0)
+    def test_duplicate_offsets_are_rejected(self):
+        with pytest.raises(ValueError, match="duplicate dose plane"):
+            dose_grid_spacing(self._dose(GridFrameOffsetVector=[0.0, 0.0], SliceThickness=2.0))
 
     def test_missing_pixel_spacing_defaults_to_one_millimetre(self):
         ds = Dataset()
@@ -221,6 +258,28 @@ class TestDoseGridSpacing:
         spacing, _ = dose_grid_spacing(self._dose(PixelSpacing=[0.0, -1.0]))
         assert spacing[1:] == pytest.approx([1.0, 1.0])
 
-    def test_non_uniform_offsets_use_the_median_step(self):
-        spacing, _ = dose_grid_spacing(self._dose(GridFrameOffsetVector=[0.0, 3.0, 6.0, 20.0]))
-        assert spacing[0] == pytest.approx(3.0)
+    def test_non_uniform_offsets_are_rejected(self):
+        with pytest.raises(ValueError, match="Dose plane spacing is non-uniform"):
+            dose_grid_spacing(self._dose(GridFrameOffsetVector=[0.0, 3.0, 6.0, 20.0]))
+
+    def test_non_monotonic_offsets_are_rejected(self):
+        with pytest.raises(ValueError, match="not monotonic"):
+            dose_grid_spacing(self._dose(GridFrameOffsetVector=[0.0, 3.0, 2.0]))
+
+    @pytest.mark.parametrize("value", [None, "", "not-a-number"])
+    def test_missing_or_non_numeric_dose_grid_scaling_is_rejected(self, value):
+        ds = SimpleNamespace() if value is None else SimpleNamespace(DoseGridScaling=value)
+        with pytest.raises(ValueError, match="missing or non-numeric"):
+            dose_grid_scaling(ds)
+
+    @pytest.mark.parametrize("value", [0.0, -1.0, float("nan"), float("inf")])
+    def test_non_positive_or_nonfinite_dose_grid_scaling_is_rejected(self, value):
+        ds = self._dose()
+        ds.DoseGridScaling = value
+        with pytest.raises(ValueError, match="finite and greater than zero"):
+            dose_grid_scaling(ds)
+
+    def test_valid_dose_grid_scaling_is_returned(self):
+        ds = self._dose()
+        ds.DoseGridScaling = 0.001
+        assert dose_grid_scaling(ds) == pytest.approx(0.001)

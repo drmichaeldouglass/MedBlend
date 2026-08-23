@@ -336,6 +336,11 @@ class TestGeometryFallbacks:
         geometry = _build_geometry([only])
         assert geometry["spacing"][0] == pytest.approx(1.0)
 
+    def test_build_geometry_rejects_non_uniform_slice_positions(self):
+        slices = [make_slice(z, instance=i) for i, z in enumerate([0.0, 3.0, 6.0, 20.0])]
+        with pytest.raises(ValueError, match="slice spacing is non-uniform"):
+            _build_geometry(slices)
+
 
 class TestLoadReferenceImageSlices:
     def _write_series(self, folder, names, z_values=(0.0, 3.0, 6.0, 9.0)):
@@ -371,6 +376,54 @@ class TestLoadReferenceImageSlices:
 
         slices = _load_reference_image_slices(tmp_path, structure)
         assert {str(ds.SeriesInstanceUID) for ds in slices} == {"1.2.3"}
+
+    def test_ambiguous_directory_without_references_is_rejected(self, tmp_path):
+        self._write_series(tmp_path, ["primary{}.dcm"])
+        for index, z in enumerate((0.0, 3.0, 6.0, 9.0)):
+            write_slice(
+                tmp_path,
+                make_slice(z, rows=8, cols=8, instance=index, series_uid="9.9.9"),
+                f"other{index}.dcm",
+            )
+
+        with pytest.raises(ValueError, match="multiple CT/MR series"):
+            _load_reference_image_slices(tmp_path, make_structure_set())
+
+    def test_contour_image_reference_resolves_one_series(self, tmp_path):
+        self._write_series(tmp_path, ["primary{}.dcm"])
+        for index, z in enumerate((0.0, 3.0, 6.0, 9.0)):
+            write_slice(
+                tmp_path,
+                make_slice(z, rows=8, cols=8, instance=index, series_uid="9.9.9"),
+                f"other{index}.dcm",
+            )
+
+        structure = make_structure_set()
+        contour_image = Dataset()
+        contour_image.ReferencedSOPInstanceUID = "9.9.9.1"
+        structure.ROIContourSequence[0].ContourSequence[0].ContourImageSequence = [contour_image]
+
+        slices = _load_reference_image_slices(tmp_path, structure)
+        assert len(slices) == 4
+        assert {str(ds.SeriesInstanceUID) for ds in slices} == {"9.9.9"}
+
+    def test_multiple_explicit_series_references_are_rejected(self, tmp_path):
+        self._write_series(tmp_path, ["primary{}.dcm"])
+
+        series_refs = []
+        for series_uid in ("1.2.3", "9.9.9"):
+            series_ref = Dataset()
+            series_ref.SeriesInstanceUID = series_uid
+            series_refs.append(series_ref)
+        study_ref = Dataset()
+        study_ref.RTReferencedSeriesSequence = series_refs
+        frame_ref = Dataset()
+        frame_ref.RTReferencedStudySequence = [study_ref]
+        structure = make_structure_set()
+        structure.ReferencedFrameOfReferenceSequence = [frame_ref]
+
+        with pytest.raises(ValueError, match="explicitly references multiple"):
+            _load_reference_image_slices(tmp_path, structure)
 
 
 class TestStructureMetadata:

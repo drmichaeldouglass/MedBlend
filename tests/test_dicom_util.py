@@ -118,6 +118,11 @@ class TestExtractDicomData:
         _, _, _, slice_spacing, _, _ = extract_dicom_data(slices)
         assert slice_spacing == pytest.approx(5.0)
 
+    def test_non_uniform_slice_positions_are_rejected(self):
+        slices = [make_slice(z, instance=i) for i, z in enumerate([0.0, 3.0, 6.0, 20.0])]
+        with pytest.raises(ValueError, match="slice spacing is non-uniform"):
+            extract_dicom_data(slices)
+
     def test_mismatched_matrix_size_names_the_offending_slice(self):
         slices = [make_slice(0.0, instance=0), make_slice(2.0, rows=4, cols=4, instance=1)]
         with pytest.raises(ValueError, match="Slice 2 is 4x4"):
