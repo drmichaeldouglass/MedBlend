@@ -71,18 +71,22 @@ def build_preset_node_tree(
     material: bpy.types.Material,
     preset: VolumePreset,
     window: Sequence[float],
+    data_range: Sequence[float],
     density_scale: float,
     emission_strength: float,
 ) -> None:
     """Wire ``material`` up as a volume shader driven by ``preset``.
 
-    The imported grid holds values normalised to ``0 - 1``, so both transfer
-    functions are resampled onto that axis over ``window`` and read straight
-    out of colour ramps. The Map Range node in front of them is the window
-    control: narrowing it is the equivalent of Slicer's shift slider.
+    The imported grid holds the values DICOM stored - Hounsfield units for a
+    CT - while a colour ramp is addressed by ``0 - 1``. Both transfer
+    functions are resampled onto that axis over ``window``, and the Map Range
+    node in front of them normalises voxel values onto it by mapping
+    ``data_range`` across. That node is also the window control: narrowing it
+    is the equivalent of Slicer's shift slider.
     """
 
     low, high = float(window[0]), float(window[1])
+    data_low, data_high = float(data_range[0]), float(data_range[1])
 
     material.use_nodes = True
     tree = material.node_tree
@@ -98,8 +102,8 @@ def build_preset_node_tree(
     window_node.label = "Window"
     window_node.name = "Window"
     window_node.clamp = True
-    window_node.inputs["From Min"].default_value = 0.0
-    window_node.inputs["From Max"].default_value = 1.0
+    window_node.inputs["From Min"].default_value = data_low
+    window_node.inputs["From Max"].default_value = data_high
     window_node.inputs["To Min"].default_value = 0.0
     window_node.inputs["To Max"].default_value = 1.0
 
@@ -168,6 +172,7 @@ def _tag_material(
     material: bpy.types.Material,
     preset: VolumePreset,
     window: Sequence[float],
+    data_range: Sequence[float],
     density_scale: float,
     emission_strength: float,
 ) -> None:
@@ -180,6 +185,7 @@ def _tag_material(
 
     material["medblend_preset"] = preset.name
     material["medblend_preset_window"] = [float(window[0]), float(window[1])]
+    material["medblend_preset_data_range"] = [float(data_range[0]), float(data_range[1])]
     material["medblend_preset_density_scale"] = float(density_scale)
     material["medblend_preset_emission_strength"] = float(emission_strength)
     material["medblend_slicer_ambient"] = preset.ambient
@@ -193,6 +199,7 @@ def _matches(
     material: bpy.types.Material,
     preset: VolumePreset,
     window: Sequence[float],
+    data_range: Sequence[float],
     density_scale: float,
     emission_strength: float,
 ) -> bool:
@@ -200,18 +207,27 @@ def _matches(
         return False
 
     stored_window = material.get("medblend_preset_window")
+    stored_data_range = material.get("medblend_preset_data_range")
     try:
         if stored_window is None or len(stored_window) != 2:
+            return False
+        # Two volumes covering different value ranges need their own Map Range
+        # settings, so a material built for one must not be handed to the other.
+        if stored_data_range is None or len(stored_data_range) != 2:
             return False
         expected = (
             float(window[0]),
             float(window[1]),
+            float(data_range[0]),
+            float(data_range[1]),
             float(density_scale),
             float(emission_strength),
         )
         actual = (
             float(stored_window[0]),
             float(stored_window[1]),
+            float(stored_data_range[0]),
+            float(stored_data_range[1]),
             float(material.get("medblend_preset_density_scale", float("nan"))),
             float(material.get("medblend_preset_emission_strength", float("nan"))),
         )
@@ -232,6 +248,7 @@ def _candidate_name(base_name: str, counter: int) -> str:
 def get_preset_material(
     preset: VolumePreset,
     window: Sequence[float],
+    data_range: Optional[Sequence[float]] = None,
     density_scale: float = DEFAULT_DENSITY_SCALE,
     emission_strength: float = DEFAULT_EMISSION_STRENGTH,
 ) -> bpy.types.Material:
@@ -241,7 +258,13 @@ def get_preset_material(
     datablock, so a user's edits to it survive and repeated applies do not
     fill the file with copies. Different settings get their own material
     rather than retinting one already in use by another volume.
+
+    ``data_range`` defaults to ``window``, which reads the preset's scalars as
+    voxel values directly.
     """
+
+    if data_range is None:
+        data_range = window
 
     base_name = f"{_MATERIAL_PREFIX} - {preset.name}"
 
@@ -251,13 +274,15 @@ def get_preset_material(
         if existing is None:
             material = bpy.data.materials.new(candidate)
             break
-        if _matches(existing, preset, window, density_scale, emission_strength):
+        if _matches(existing, preset, window, data_range, density_scale, emission_strength):
             return existing
     else:
         material = bpy.data.materials.new(base_name)
 
-    build_preset_node_tree(material, preset, window, density_scale, emission_strength)
-    _tag_material(material, preset, window, density_scale, emission_strength)
+    build_preset_node_tree(
+        material, preset, window, data_range, density_scale, emission_strength
+    )
+    _tag_material(material, preset, window, data_range, density_scale, emission_strength)
     material.diffuse_color = _linear_rgba(preset_lib.representative_color(preset))
     return material
 
@@ -324,9 +349,12 @@ def apply_volume_preset(
         fit_mode=fit_mode,
         modality=str(obj.get("medblend_modality", "") or ""),
     )
+    data_range = preset_lib.resolve_data_range(window, intensity_min, intensity_max)
 
     try:
-        material = get_preset_material(preset, window, density_scale, emission_strength)
+        material = get_preset_material(
+            preset, window, data_range, density_scale, emission_strength
+        )
     except Exception as exc:
         return fail(f"Could not build the '{preset.name}' material: {exc}")
 

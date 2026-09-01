@@ -75,11 +75,16 @@ def load_dicom_series(folder: Path, series_uid: str) -> List[pydicom.Dataset]:
     return images
 
 
-def rescale_dicom_image(array: np.ndarray) -> Tuple[np.ndarray, float, float]:
-    """Scale the array into ``[0, 1]`` and report the source intensity range.
+def image_intensity_range(array: np.ndarray) -> Tuple[np.ndarray, float, float]:
+    """Validate voxel intensities and report the range they occupy.
 
-    The original min/max are returned so callers can record the mapping back
-    to Hounsfield units, which the normalisation would otherwise discard.
+    The values are passed through untouched, so a CT keeps the Hounsfield
+    units the modality LUT produced and a voxel sampled in Blender reads the
+    same number as the DICOM file. Only the dtype is narrowed to ``float32``,
+    which is what OpenVDB's ``FloatGrid`` stores anyway.
+
+    The min/max are returned for the shader: a transfer function still has to
+    be windowed onto the range a particular scan occupies.
     """
 
     array = np.asarray(array, dtype=np.float32)
@@ -87,13 +92,8 @@ def rescale_dicom_image(array: np.ndarray) -> Tuple[np.ndarray, float, float]:
         raise ValueError("DICOM image data is empty")
     if not np.all(np.isfinite(array)):
         raise ValueError("DICOM image data contains non-finite intensity values")
-    min_value = float(np.min(array))
-    max_value = float(np.max(array))
-    if max_value == min_value:
-        return np.zeros_like(array, dtype=np.float32), min_value, max_value
 
-    scaled = (array - min_value) / (max_value - min_value)
-    return np.asarray(scaled, dtype=np.float32), min_value, max_value
+    return array, float(np.min(array)), float(np.max(array))
 
 
 def _instance_number_key(ds: pydicom.Dataset) -> int:

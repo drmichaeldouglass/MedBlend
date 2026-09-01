@@ -83,17 +83,13 @@ To change the material properties, select the Shading tab from the top edge and 
 
 ![materials3](https://user-images.githubusercontent.com/52724915/226318971-e3f63834-0569-43a0-8828-2ea77c7fe8cd.png)
 
-DICOM CT is stored in Hounsfield units, which typically run from about -1000 (air) through 0 (water) to well beyond 1000 (bone). MedBlend normalises each imported image volume to the range `0 - 1` so it renders correctly without per-dataset shader tweaking, and records the source range on the imported object as the custom properties `medblend_intensity_min` and `medblend_intensity_max` (visible in `Object Properties > Custom Properties`).
+DICOM CT is stored in Hounsfield units, which typically run from about -1000 (air) through 0 (water) to well beyond 1000 (bone). **MedBlend imports those values unchanged**: a voxel in the VDB grid reads the same number as the DICOM file, so -1000 is air and 400 is bone in every scene, whatever else is in the scan. The range a particular series covers is recorded on the imported object as the custom properties `medblend_intensity_min` and `medblend_intensity_max` (visible in `Object Properties > Custom Properties`), along with `medblend_modality`.
 
-To work in Hounsfield units, convert a normalised voxel value back with:
+Normalising is left to the shader, which is the only place that needs it. The Image Material's node group takes `Min HU` and `Max HU` inputs, and MedBlend fills them in with the range of the volume it is applied to, so a fresh import renders without hand-tuning. Narrow them to isolate a tissue: `-1000` to `-400` for lung, `-100` to `100` for soft tissue, `200` to `1500` for bone. Because the numbers are Hounsfield units rather than a fraction of one particular scan's range, the same window means the same thing on the next patient.
 
-```
-HU = value * (medblend_intensity_max - medblend_intensity_min) + medblend_intensity_min
-```
+Each window gets its own copy of the material (`Image Material - -1024 to 3071`), so retuning one volume never rewindows another that is already in the scene.
 
-A Map Range node after the Volume Info node is the easiest way to isolate a particular HU window - map the normalised `0 - 1` input down to the fraction of the range that your tissue of interest occupies.
-
-Imported dose volumes are *not* normalised: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`.
+Imported dose volumes are likewise unscaled: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`.
 
 ![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
 
@@ -108,7 +104,7 @@ Apply one either way:
 
 Three settings control how the preset lands:
 
-- **Scalar Range** decides how the preset's scalar values map onto your data. Slicer's `CT-` presets are keyed to Hounsfield units, which are calibrated, so on a CT they are read directly against the volume's recorded HU range. Everything else - MR, ultrasound, micro-CT - is stored in per-scan intensities with no fixed meaning, so the preset's authored window is stretched across whatever range the volume occupies. `Auto` picks between the two for you; `Hounsfield Units` and `Fit To Data` force one.
+- **Scalar Range** decides how the preset's scalar values map onto your data. Slicer's `CT-` presets are keyed to Hounsfield units, which are calibrated, so on a CT a preset scalar is read against the voxel value that equals it - no conversion in between. Everything else - MR, ultrasound, micro-CT - is stored in per-scan intensities with no fixed meaning, so the preset's authored window is stretched across whatever range the volume occupies. `Auto` picks between the two for you; `Hounsfield Units` and `Fit To Data` force one.
 - **Density** is the extinction of a fully opaque voxel, in 1/m. Raise it for a more solid volume, lower it to see further inside. Blender volumes are imported in metres, so this is what converts Slicer's per-sample opacity into something Blender can integrate.
 - **Emission** is how brightly the volume glows on its own. The default of `1.0` means a preset reads immediately without adding a light; drop it towards zero to light the volume with scene lights and let the preset's colours act as scattering albedo instead.
 
@@ -118,11 +114,11 @@ Applying the same preset with the same settings reuses one material, so pushing 
 
 Open the Shading tab with the volume selected and you get a small, editable node tree:
 
-- **Window** (a Map Range node) is the equivalent of Slicer's shift slider. Narrowing `From Min`/`From Max` squeezes the whole preset into a tighter part of the intensity range.
+- **Window** (a Map Range node) maps voxel values onto the `0 - 1` the colour ramps behind it are addressed by, and is the equivalent of Slicer's shift slider. `From Min`/`From Max` are in the volume's own units - Hounsfield units for a CT - so narrowing them squeezes the whole preset into a tighter part of the intensity range.
 - **Color Transfer** and **Scalar Opacity** are the two transfer functions as colour ramps. Drag the stops to retune the preset; the opacity ramp carries its value in the alpha channel, which is what the shader reads.
 - **Density Scale** is the multiply node that turns opacity into Blender density.
 
-The material also records what it was built from as custom properties (`medblend_preset`, `medblend_preset_window`, and Slicer's `medblend_slicer_ambient`/`_diffuse`/`_specular`/`_specular_power`/`_shade`), visible in `Material Properties > Custom Properties`.
+The material also records what it was built from as custom properties (`medblend_preset`, `medblend_preset_window`, `medblend_preset_data_range`, and Slicer's `medblend_slicer_ambient`/`_diffuse`/`_specular`/`_specular_power`/`_shade`), visible in `Material Properties > Custom Properties`.
 
 ### What is and is not carried over
 
@@ -141,7 +137,7 @@ Start by creating a place-holder object. From the add menu, add a cube into the 
 With the cube selected, go to the modifier menu, select Add Modifier and add a Volume to Mesh modifier.
 ![volume_to_mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/7f940498-9199-4bc3-b13e-75f76834846a)
 
-From the object property, select the CT volume, then adjust the threshold to isolate the tissue you want. Because MedBlend normalises image volumes to `0 - 1`, the threshold lives in that range too - around `0.4` is a good starting point for bone in a typical CT, and lower values pick up soft tissue. Use the `medblend_intensity_min`/`medblend_intensity_max` custom properties on the volume if you need to pick a threshold for a specific HU value.
+From the object property, select the CT volume, then adjust the threshold to isolate the tissue you want. The threshold is in Hounsfield units, the same as the voxels: around `300` is a good starting point for bone in a typical CT, `-500` picks up the lung-air boundary, and `0` sits at water. The `medblend_intensity_min`/`medblend_intensity_max` custom properties on the volume tell you what range that particular scan actually covers.
 
 ![volume_to_mesh_select_CT](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/decbcaab-e009-4f8a-b5a3-eb1d1cec4795)
 

@@ -220,6 +220,29 @@ class TestResolveWindow:
         assert window == CT_HU_RANGE
 
 
+class TestResolveDataRange:
+    def test_the_volumes_own_range_is_what_the_shader_maps(self):
+        preset = presets.get_preset("CT-Bone")
+        window = presets.resolve_window(preset, *CT_HU_RANGE, modality="CT")
+
+        assert presets.resolve_data_range(window, *CT_HU_RANGE) == CT_HU_RANGE
+
+    def test_a_fitted_preset_stretches_its_window_over_the_data(self):
+        preset = presets.get_preset("MR-Default")
+        window = presets.resolve_window(preset, 0.0, 4095.0, modality="MR")
+
+        assert window == preset.window
+        assert presets.resolve_data_range(window, 0.0, 4095.0) == (0.0, 4095.0)
+
+    @pytest.mark.parametrize(
+        "low,high",
+        [(None, None), (0.0, None), (None, 1.0), (5.0, 5.0), (10.0, 1.0)],
+        ids=["missing", "no-max", "no-min", "collapsed", "inverted"],
+    )
+    def test_an_unusable_range_falls_back_to_the_window(self, low, high):
+        assert presets.resolve_data_range((-16.0, 641.0), low, high) == (-16.0, 641.0)
+
+
 class TestColorHelpers:
     def test_srgb_endpoints_are_preserved(self):
         assert presets.srgb_to_linear(0.0) == 0.0
@@ -451,7 +474,9 @@ class TestBuildPresetNodeTree:
     @pytest.fixture
     def material(self, materials):
         preset = presets.get_preset("CT-Bone")
-        return volume_materials.get_preset_material(preset, CT_HU_RANGE, 200.0, 1.0)
+        return volume_materials.get_preset_material(
+            preset, CT_HU_RANGE, CT_HU_RANGE, 200.0, 1.0
+        )
 
     def test_the_volume_grid_reaches_both_ramps_through_the_window(self, material):
         window = node_named(material, "Window")
@@ -464,12 +489,30 @@ class TestBuildPresetNodeTree:
             ramp = node_named(material, ramp_name)
             assert linked_from(material, ramp.inputs["Fac"]) == [window.outputs["Result"]]
 
-    def test_the_window_starts_wide_open(self, material):
+    def test_the_window_normalises_the_stored_values_for_the_ramps(self, material):
+        # Voxels arrive in Hounsfield units; a colour ramp is addressed by
+        # 0 - 1, and this node is what spans one onto the other.
         window = node_named(material, "Window")
 
         assert window.clamp is True
+        assert window.inputs["From Min"].default_value == CT_HU_RANGE[0]
+        assert window.inputs["From Max"].default_value == CT_HU_RANGE[1]
+        assert window.inputs["To Min"].default_value == 0.0
+        assert window.inputs["To Max"].default_value == 1.0
+
+    def test_a_fitted_preset_maps_the_data_range_onto_the_authored_window(self, materials):
+        preset = presets.get_preset("MR-Default")
+        material = volume_materials.get_preset_material(preset, preset.window, (0.0, 4095.0))
+        window = node_named(material, "Window")
+
+        # The ramps hold the preset's own window, so the Map Range has to
+        # stretch the scan's range across it rather than pass values through.
         assert window.inputs["From Min"].default_value == 0.0
-        assert window.inputs["From Max"].default_value == 1.0
+        assert window.inputs["From Max"].default_value == 4095.0
+        expected = presets.resample(preset.opacity, *preset.window)
+        assert [stop.position for stop in node_named(material, "Scalar Opacity").color_ramp.elements] == (
+            pytest.approx([position for position, _ in expected])
+        )
 
     def test_the_ramps_carry_the_resampled_transfer_functions(self, material):
         preset = presets.get_preset("CT-Bone")
@@ -572,27 +615,34 @@ class TestBuildPresetNodeTree:
 class TestMaterialReuse:
     def test_the_same_settings_hand_back_the_same_material(self, materials):
         preset = presets.get_preset("CT-Bone")
-        first = volume_materials.get_preset_material(preset, CT_HU_RANGE, 200.0, 1.0)
-        second = volume_materials.get_preset_material(preset, CT_HU_RANGE, 200.0, 1.0)
+        first = volume_materials.get_preset_material(preset, CT_HU_RANGE, CT_HU_RANGE, 200.0, 1.0)
+        second = volume_materials.get_preset_material(preset, CT_HU_RANGE, CT_HU_RANGE, 200.0, 1.0)
 
         assert first is second
         assert len(materials) == 1
 
     @pytest.mark.parametrize(
-        "window,density,emission",
+        "window,data_range,density,emission",
         [
-            ((-1000.0, 3071.0), 200.0, 1.0),
-            (CT_HU_RANGE, 400.0, 1.0),
-            (CT_HU_RANGE, 200.0, 0.5),
+            ((-1000.0, 3071.0), CT_HU_RANGE, 200.0, 1.0),
+            (CT_HU_RANGE, (-1000.0, 3071.0), 200.0, 1.0),
+            (CT_HU_RANGE, CT_HU_RANGE, 400.0, 1.0),
+            (CT_HU_RANGE, CT_HU_RANGE, 200.0, 0.5),
         ],
-        ids=["window", "density", "emission"],
+        ids=["window", "data-range", "density", "emission"],
     )
-    def test_different_settings_get_their_own_material(self, materials, window, density, emission):
+    def test_different_settings_get_their_own_material(
+        self, materials, window, data_range, density, emission
+    ):
         # Retinting the shared material in place would change how a volume
-        # already in the scene renders.
+        # already in the scene renders. Two scans covering different value
+        # ranges need different Map Range settings, so the data range counts
+        # as a setting of its own.
         preset = presets.get_preset("CT-Bone")
-        first = volume_materials.get_preset_material(preset, CT_HU_RANGE, 200.0, 1.0)
-        second = volume_materials.get_preset_material(preset, window, density, emission)
+        first = volume_materials.get_preset_material(preset, CT_HU_RANGE, CT_HU_RANGE, 200.0, 1.0)
+        second = volume_materials.get_preset_material(
+            preset, window, data_range, density, emission
+        )
 
         assert first is not second
         assert len(materials) == 2
@@ -616,6 +666,9 @@ class TestApplyVolumePreset:
 
         assert obj.data.materials == [material]
         assert material.get("medblend_preset_window") == pytest.approx(list(CT_HU_RANGE))
+        # HU in, HU out: the shader window matches the transfer function's, so
+        # a scalar in the preset lands on the voxel value that equals it.
+        assert material.get("medblend_preset_data_range") == pytest.approx(list(CT_HU_RANGE))
 
     def test_an_mr_volume_stretches_the_preset_over_its_data_range(self, materials):
         obj = FakeVolume(
@@ -628,12 +681,17 @@ class TestApplyVolumePreset:
         assert material.get("medblend_preset_window") == pytest.approx(
             list(presets.get_preset("MR-Default").window)
         )
+        assert material.get("medblend_preset_data_range") == pytest.approx([0.0, 4095.0])
 
     def test_a_volume_without_a_recorded_range_still_gets_a_material(self, materials):
         material = volume_materials.apply_volume_preset(FakeVolume(), "CT-Bone")
 
         assert material is not None
         assert material.get("medblend_preset_window") == pytest.approx(
+            list(presets.get_preset("CT-Bone").window)
+        )
+        # With no range to map, the preset's scalars are read as voxel values.
+        assert material.get("medblend_preset_data_range") == pytest.approx(
             list(presets.get_preset("CT-Bone").window)
         )
 

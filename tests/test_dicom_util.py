@@ -10,12 +10,12 @@ from MedBlend.dicom_util import (
     check_dicom_image_type,
     extract_dicom_data,
     float_or,
+    image_intensity_range,
     image_orientation_axes,
     is_dose_file,
     is_structure_file,
     load_dicom_series,
     positive_float_or,
-    rescale_dicom_image,
     sort_slices_spatially,
 )
 
@@ -59,29 +59,35 @@ class TestModalityChecks:
         assert check_dicom_image_type(ds) is False
 
 
-class TestRescale:
-    def test_maps_to_unit_range_and_reports_source_range(self):
+class TestIntensityRange:
+    def test_hounsfield_values_are_left_alone(self):
         array = np.array([[-1024.0, 0.0, 3000.0]], dtype=np.float32)
-        scaled, low, high = rescale_dicom_image(array)
-        assert (low, high) == (-1024.0, 3000.0)
-        assert scaled.min() == pytest.approx(0.0)
-        assert scaled.max() == pytest.approx(1.0)
-        # The reported range must invert the normalisation exactly.
-        assert np.allclose(scaled * (high - low) + low, array, atol=1e-3)
+        voxels, low, high = image_intensity_range(array)
 
-    def test_constant_volume_stays_float32(self):
-        scaled, low, high = rescale_dicom_image(np.full((2, 2), 5.0, dtype=np.float32))
-        assert scaled.dtype == np.float32
-        assert not scaled.any()
+        assert (low, high) == (-1024.0, 3000.0)
+        # The whole point: a voxel still reads as the number in the file.
+        assert np.array_equal(voxels, array)
+
+    def test_a_constant_volume_reports_a_collapsed_range(self):
+        voxels, low, high = image_intensity_range(np.full((2, 2), 5.0, dtype=np.float32))
+
+        assert voxels.dtype == np.float32
+        assert np.all(voxels == 5.0)
         assert (low, high) == (5.0, 5.0)
 
     def test_output_is_float32_for_float64_input(self):
-        scaled, _, _ = rescale_dicom_image(np.arange(6, dtype=np.float64).reshape(2, 3))
-        assert scaled.dtype == np.float32
+        voxels, low, high = image_intensity_range(np.arange(6, dtype=np.float64).reshape(2, 3))
+
+        assert voxels.dtype == np.float32
+        assert (low, high) == (0.0, 5.0)
+
+    def test_an_empty_volume_is_rejected(self):
+        with pytest.raises(ValueError, match="empty"):
+            image_intensity_range(np.asarray([], dtype=np.float32))
 
     def test_non_finite_values_are_rejected(self):
         with pytest.raises(ValueError, match="non-finite intensity"):
-            rescale_dicom_image(np.asarray([[0.0, float("nan")]]))
+            image_intensity_range(np.asarray([[0.0, float("nan")]]))
 
 
 class TestSorting:
