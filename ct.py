@@ -10,9 +10,9 @@ import pydicom
 from .dicom_util import (
     check_dicom_image_type,
     extract_dicom_data,
+    image_intensity_range,
     image_orientation_axes,
     load_dicom_series,
-    rescale_dicom_image,
     sort_slices_spatially,
 )
 from .node_groups import apply_dicom_shader
@@ -78,7 +78,10 @@ def load_ct_series(
         show_message_box(str(exc), "Error", "ERROR")
         return False
 
-    ct_volume, intensity_min, intensity_max = rescale_dicom_image(ct_volume)
+    # Voxels keep the values the modality LUT produced - Hounsfield units
+    # for CT - rather than being normalised, so what is rendered, sampled
+    # and thresholded is the number in the DICOM file.
+    ct_volume, intensity_min, intensity_max = image_intensity_range(ct_volume)
 
     slice_spacing = slice_spacing or 1.0
     spacing_values = (float(slice_spacing), float(spacing[0]), float(spacing[1]))
@@ -87,6 +90,20 @@ def load_ct_series(
     if not result:
         return False
     _output_path, ct_object = result
+
+    ct_object["medblend_is_ct"] = True
+    # Dose and structure imports pick their alignment anchor by this index
+    # rather than by name, which does not sort in import order.
+    ct_object[CT_IMPORT_INDEX_KEY] = next_ct_import_index()
+    # Volume presets read this to decide whether the voxels are in a
+    # calibrated unit (Hounsfield) or a per-scan intensity range.
+    ct_object["medblend_modality"] = str(getattr(selected_file, "Modality", "") or "")
+    # The range the voxels actually occupy, in the units they are stored in.
+    # Volume presets window their transfer functions onto it, and it saves the
+    # user reading a histogram to find a threshold. Recorded before the
+    # placement below, which can fail without making the values any less true.
+    ct_object["medblend_intensity_min"] = float(intensity_min)
+    ct_object["medblend_intensity_max"] = float(intensity_max)
 
     placement_error = None
     try:
@@ -111,23 +128,11 @@ def load_ct_series(
         basis = np.column_stack((slice_axis, row_axis, col_axis))
 
         frame_uid = getattr(selected_file, "FrameOfReferenceUID", "")
-        ct_object["medblend_is_ct"] = True
-        # Dose and structure imports pick their alignment anchor by this index
-        # rather than by name, which does not sort in import order.
-        ct_object[CT_IMPORT_INDEX_KEY] = next_ct_import_index()
-        # Volume presets read this to decide whether the voxels are in a
-        # calibrated unit (Hounsfield) or a per-scan intensity range.
-        ct_object["medblend_modality"] = str(getattr(selected_file, "Modality", "") or "")
         if frame_uid:
             ct_object["medblend_frame_of_reference_uid"] = str(frame_uid)
         ct_object["medblend_ct_origin_mm"] = [float(v) for v in array_origin]
         ct_object["medblend_ct_basis_mm"] = [float(v) for v in basis.reshape(-1)]
         ct_object["medblend_ct_spacing_mm"] = [float(v) for v in spacing_values]
-        # Voxels are normalised to [0, 1] for rendering; keep the source range so
-        # a value can be mapped back to Hounsfield units:
-        #   HU = value * (max - min) + min
-        ct_object["medblend_intensity_min"] = float(intensity_min)
-        ct_object["medblend_intensity_max"] = float(intensity_max)
 
         # Place the CT in DICOM patient coordinates (mm -> m) so dose,
         # structures, and proton plans land in the same frame regardless of
@@ -163,5 +168,12 @@ def load_ct_series(
             emission_strength=emission_strength,
         )
     else:
-        apply_dicom_shader("Image Material", ct_object)
+        # The default material's Map Range node is what turns stored
+        # intensities into the 0 - 1 the colour ramp behind it expects, so it
+        # has to be told the range these voxels occupy.
+        apply_dicom_shader(
+            "Image Material",
+            ct_object,
+            data_range=(intensity_min, intensity_max),
+        )
     return True

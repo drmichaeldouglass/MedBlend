@@ -1,10 +1,16 @@
 """Volume rendering presets modelled on 3D Slicer's.
 
 Slicer describes a preset with two piecewise-linear transfer functions keyed
-by scalar value - a colour function and a scalar opacity function. MedBlend
-normalises every imported image volume to ``0 - 1`` and records the source
-range on the object, so a preset is applied by resampling both functions onto
-that normalised axis and feeding them into colour ramps in the volume shader.
+by scalar value - a colour function and a scalar opacity function. Imported
+image volumes hold the values DICOM stored, so a CT is in Hounsfield units and
+a ``CT-`` preset's scalars can be read against it directly. A preset is
+applied by resampling both functions onto the ``0 - 1`` axis a Blender colour
+ramp is addressed by, and normalising the voxel values onto that same axis in
+the shader with a Map Range node.
+
+Two ranges therefore matter, and they are not always the same: the *window* is
+the scalar domain the transfer functions are resampled over, and the *data
+range* is the span of voxel values the Map Range node maps onto it.
 
 Everything in this module is plain data and arithmetic; the Blender node tree
 is built in :mod:`volume_materials`.
@@ -256,13 +262,15 @@ def resolve_window(
     fit_mode: str = FIT_AUTO,
     modality: str = "",
 ) -> Tuple[float, float]:
-    """Choose the scalar window a preset's transfer functions are stretched over.
+    """Choose the scalar window a preset's transfer functions are resampled over.
 
-    ``FIT_ABSOLUTE`` maps the preset straight onto the volume's own intensity
-    range, which is what Hounsfield units call for. ``FIT_RANGE`` instead
-    stretches the preset's authored window across whatever range the volume
-    happens to occupy - the sensible choice for MR, ultrasound and micro-CT,
-    where stored intensities carry no calibrated meaning and vary per scan.
+    ``FIT_ABSOLUTE`` spans the volume's own intensity range, so a scalar in
+    the transfer function lands on the voxel value that equals it - which is
+    what Hounsfield units call for. ``FIT_RANGE`` instead spans the preset's
+    authored window, which :func:`resolve_data_range` then stretches across
+    whatever range the volume happens to occupy - the sensible choice for MR,
+    ultrasound and micro-CT, where stored intensities carry no calibrated
+    meaning and vary per scan.
     """
 
     has_intensity_range = (
@@ -279,6 +287,33 @@ def resolve_window(
         return float(intensity_min), float(intensity_max)
 
     return preset.window
+
+
+def resolve_data_range(
+    window: Sequence[float],
+    intensity_min: Optional[float],
+    intensity_max: Optional[float],
+) -> Tuple[float, float]:
+    """Choose the voxel range the shader maps onto ``window``.
+
+    Voxels are imported unmodified, so the shader has to do the normalising a
+    colour ramp needs. The volume's own intensity range is what to map: in
+    Hounsfield mode it equals the window, so a scalar reads as itself, and in
+    fit mode it stretches the preset's authored window across the data.
+
+    Falls back to the window itself for a volume with no recorded range - an
+    older import, or one hand-tagged - which reads the scalars as voxel values
+    rather than guessing a range the volume may not occupy.
+    """
+
+    if (
+        intensity_min is not None
+        and intensity_max is not None
+        and intensity_max > intensity_min
+    ):
+        return float(intensity_min), float(intensity_max)
+
+    return float(window[0]), float(window[1])
 
 
 def representative_color(preset: VolumePreset) -> ColorPoint:

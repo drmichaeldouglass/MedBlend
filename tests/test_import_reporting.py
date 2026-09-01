@@ -25,6 +25,7 @@ class FakeVolumeObject:
     def __init__(self, name="CT"):
         self.name = name
         self.matrix_world = None
+        self.voxels = None
         self._properties = {}
 
     def get(self, key, default=None):
@@ -57,8 +58,10 @@ def stub_volume_writer(monkeypatch):
 
     created = []
 
-    def fake_write(_array, _spacing, target_name, on_error=None):
+    def fake_write(array, _spacing, target_name, on_error=None):
         obj = FakeVolumeObject(Path(target_name).stem)
+        # Kept so a test can check what would have been written to the grid.
+        obj.voxels = array
         created.append(obj)
         return Path(target_name), obj
 
@@ -105,6 +108,61 @@ class TestCtPlacementReporting:
         selected = write_ct_series(tmp_path, [1, 0, 0, 0, 1, 0])
         ct_module.load_ct_series(selected)
         assert stub_volume_writer[0].get(ct_module.CT_IMPORT_INDEX_KEY) == 1
+
+
+class TestCtIntensities:
+    """The grid holds what DICOM stored, not a per-scan 0 - 1 rescaling."""
+
+    # make_slice stores 0/100/200 with RescaleIntercept -1024.
+    EXPECTED_HU = [-1024.0, -924.0, -824.0]
+
+    def test_the_voxels_keep_their_hounsfield_values(
+        self, tmp_path, captured, stub_volume_writer
+    ):
+        selected = write_ct_series(tmp_path, [1, 0, 0, 0, 1, 0])
+        assert ct_module.load_ct_series(selected) is True
+
+        written = stub_volume_writer[0].voxels
+        assert sorted(np.unique(written).tolist()) == self.EXPECTED_HU
+        assert written.dtype == np.float32
+
+    def test_the_recorded_range_is_the_hounsfield_range(
+        self, tmp_path, captured, stub_volume_writer
+    ):
+        selected = write_ct_series(tmp_path, [1, 0, 0, 0, 1, 0])
+        ct_module.load_ct_series(selected)
+        obj = stub_volume_writer[0]
+
+        assert obj.get("medblend_intensity_min") == self.EXPECTED_HU[0]
+        assert obj.get("medblend_intensity_max") == self.EXPECTED_HU[-1]
+
+    def test_the_default_material_is_windowed_onto_that_range(
+        self, tmp_path, captured, stub_volume_writer, monkeypatch
+    ):
+        calls = []
+        monkeypatch.setattr(
+            ct_module,
+            "apply_dicom_shader",
+            lambda *args, **kwargs: calls.append(kwargs) or True,
+        )
+        selected = write_ct_series(tmp_path, [1, 0, 0, 0, 1, 0])
+        ct_module.load_ct_series(selected)
+
+        assert len(calls) == 1
+        assert calls[0]["data_range"] == (self.EXPECTED_HU[0], self.EXPECTED_HU[-1])
+
+    def test_the_range_survives_a_placement_failure(
+        self, tmp_path, captured, stub_volume_writer
+    ):
+        # The values are no less true for the volume being unplaceable, and a
+        # preset applied afterwards needs them to window itself.
+        selected = write_ct_series(tmp_path, [0, 0, 0, 0, 0, 0])
+        ct_module.load_ct_series(selected)
+        obj = stub_volume_writer[0]
+
+        assert obj.get("medblend_intensity_min") == self.EXPECTED_HU[0]
+        assert obj.get("medblend_intensity_max") == self.EXPECTED_HU[-1]
+        assert obj.get("medblend_modality") == "CT"
 
 
 def make_dose_dataset(tmp_path, orientation):
