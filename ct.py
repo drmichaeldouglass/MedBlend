@@ -15,11 +15,23 @@ from .dicom_util import (
     sort_slices_spatially,
 )
 from .node_groups import apply_dicom_shader
+from .presets import FIT_AUTO, NO_PRESET
 from .ui_utils import show_message_box
+from .volume_materials import (
+    DEFAULT_DENSITY_SCALE,
+    DEFAULT_EMISSION_STRENGTH,
+    apply_volume_preset,
+)
 from .volume_utils import set_object_patient_transform, write_vdb_volume
 
 
-def load_ct_series(file_path: Path) -> bool:
+def load_ct_series(
+    file_path: Path,
+    preset_name: str = NO_PRESET,
+    fit_mode: str = FIT_AUTO,
+    density_scale: float = DEFAULT_DENSITY_SCALE,
+    emission_strength: float = DEFAULT_EMISSION_STRENGTH,
+) -> bool:
     try:
         selected_file = pydicom.dcmread(file_path)
     except Exception as exc:
@@ -101,6 +113,9 @@ def load_ct_series(file_path: Path) -> bool:
 
         frame_uid = getattr(selected_file, "FrameOfReferenceUID", "")
         ct_object["medblend_is_ct"] = True
+        # Volume presets read this to decide whether the voxels are in a
+        # calibrated unit (Hounsfield) or a per-scan intensity range.
+        ct_object["medblend_modality"] = str(getattr(selected_file, "Modality", "") or "")
         if frame_uid:
             ct_object["medblend_frame_of_reference_uid"] = str(frame_uid)
         ct_object["medblend_ct_origin_mm"] = [float(v) for v in array_origin]
@@ -129,5 +144,14 @@ def load_ct_series(file_path: Path) -> bool:
         # Metadata is best-effort and should not block import.
         pass
 
-    apply_dicom_shader("Image Material", ct_object)
+    if preset_name and preset_name != NO_PRESET:
+        apply_volume_preset(
+            ct_object,
+            preset_name,
+            fit_mode=fit_mode,
+            density_scale=density_scale,
+            emission_strength=emission_strength,
+        )
+    else:
+        apply_dicom_shader("Image Material", ct_object)
     return True

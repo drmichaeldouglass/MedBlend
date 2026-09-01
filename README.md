@@ -63,7 +63,7 @@ If Blender cannot write temporary VDB files in its default temp location, open t
 
 MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
 
-- **Load DICOM Images** allows you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. 
+- **Load DICOM Images** allows you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. The file dialog also has a `Preset` dropdown, which builds the imported volume's material from one of the [volume rendering presets](#volume-rendering-presets) instead of the default Image Material. 
 
 - **Load DICOM Dose** imports a radiotherapy DICOM dose file and displays the dose distribution as a volume in Blender. 
 
@@ -96,6 +96,39 @@ A Map Range node after the Volume Info node is the easiest way to isolate a part
 Imported dose volumes are *not* normalised: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`.
 
 ![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
+
+## Volume rendering presets
+
+MedBlend ships the 31 volume rendering presets from [3D Slicer](https://www.slicer.org) - `CT-Bone`, `CT-Lung`, `CT-Cardiac`, `MR-Default`, `MR-T2-Brain`, `uCT-Skull` and the rest - as ready-made Blender volume materials. Each one is Slicer's own colour transfer function and scalar opacity function rebuilt as colour ramps in a Principled Volume shader, so a freshly imported CT or MR looks like the equivalent view in Slicer without hand-tuning a shader.
+
+Apply one either way:
+
+- **At import.** Pick a preset in the `Preset` dropdown of the Load DICOM Images file dialog. Leaving it on `Default Image Material` keeps the previous behaviour.
+- **Afterwards.** Select one or more imported volumes, choose a preset under `Image Volume Presets` in the Medical sidebar, and press `Apply Preset`.
+
+Three settings control how the preset lands:
+
+- **Scalar Range** decides how the preset's scalar values map onto your data. Slicer's `CT-` presets are keyed to Hounsfield units, which are calibrated, so on a CT they are read directly against the volume's recorded HU range. Everything else - MR, ultrasound, micro-CT - is stored in per-scan intensities with no fixed meaning, so the preset's authored window is stretched across whatever range the volume occupies. `Auto` picks between the two for you; `Hounsfield Units` and `Fit To Data` force one.
+- **Density** is the extinction of a fully opaque voxel, in 1/m. Raise it for a more solid volume, lower it to see further inside. Blender volumes are imported in metres, so this is what converts Slicer's per-sample opacity into something Blender can integrate.
+- **Emission** is how brightly the volume glows on its own. The default of `1.0` means a preset reads immediately without adding a light; drop it towards zero to light the volume with scene lights and let the preset's colours act as scattering albedo instead.
+
+Applying the same preset with the same settings reuses one material, so pushing a preset onto several volumes - or re-applying it after an edit - does not fill the file with copies. Different settings get their own material rather than changing one that another volume is already using.
+
+### Editing a preset material
+
+Open the Shading tab with the volume selected and you get a small, editable node tree:
+
+- **Window** (a Map Range node) is the equivalent of Slicer's shift slider. Narrowing `From Min`/`From Max` squeezes the whole preset into a tighter part of the intensity range.
+- **Color Transfer** and **Scalar Opacity** are the two transfer functions as colour ramps. Drag the stops to retune the preset; the opacity ramp carries its value in the alpha channel, which is what the shader reads.
+- **Density Scale** is the multiply node that turns opacity into Blender density.
+
+The material also records what it was built from as custom properties (`medblend_preset`, `medblend_preset_window`, and Slicer's `medblend_slicer_ambient`/`_diffuse`/`_specular`/`_specular_power`/`_shade`), visible in `Material Properties > Custom Properties`.
+
+### What is and is not carried over
+
+Colours are converted from Slicer's sRGB display values into Blender's scene-linear colour space, so hues match rather than rendering washed out. Two parts of a Slicer preset have no Blender equivalent and are not applied: the gradient opacity functions, because shader nodes cannot read a volume's gradient magnitude, and the Phong shading parameters, because Blender's volume shader is physically based - those are recorded on the material for reference instead.
+
+The presets are reproduced from Slicer under its BSD-style licence; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). To refresh them from a newer Slicer release, run `python "development scripts/generate_preset_data.py"`.
 
 ## Converting CT volumes into a mesh
 
