@@ -69,7 +69,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" \
             --background \
-            --python-expr "import bpy, importlib; module = importlib.import_module('bl_ext.user_default.medblend'); assert module; assert 'bl_ext.user_default.medblend' in bpy.context.preferences.addons; import pydicom; print('MedBlend smoke test passed with pydicom', pydicom.__version__)"
+            --python-expr "import bpy, importlib; module = importlib.import_module('bl_ext.user_default.medblend'); assert module; assert 'bl_ext.user_default.medblend' in bpy.context.preferences.addons; import pydicom; assert pydicom.__version__ == '3.0.2', pydicom.__version__; print('MedBlend smoke test passed with pydicom', pydicom.__version__)"
 
       - name: Audit archive contents
         run: |
@@ -91,7 +91,7 @@ jobs:
                   "THIRD_PARTY_NOTICES.md",
                   "assets/MedBlend_Assets.blend",
                   "licenses/Slicer-License.txt",
-                  "wheels/pydicom-3.0.1-py3-none-any.whl",
+                  "wheels/pydicom-3.0.2-py3-none-any.whl",
               }
               missing = sorted(required - names)
               if missing:

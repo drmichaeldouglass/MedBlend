@@ -22,6 +22,6 @@ Contribution and Software License Agreement, Version 1.0 (December 20, 2005),
 a BSD-style licence. 3D Slicer is not a medical device and is intended for
 research use only.
 
-## pydicom 3.0.1
+## pydicom 3.0.2
 
-The extension archive bundles the unmodified `pydicom-3.0.1-py3-none-any.whl` distribution. pydicom is primarily licensed under the MIT License and includes additional third-party notices. Its complete upstream licence file is included in the wheel's package metadata.
+The extension archive bundles the unmodified `pydicom-3.0.2-py3-none-any.whl` distribution. pydicom is primarily licensed under the MIT License and includes additional third-party notices. Its complete upstream licence file is included in the wheel's package metadata.
