@@ -160,9 +160,16 @@ class MEDBLEND_OT_Apply_Volume_Preset(bpy.types.Operator):
             self.report({"ERROR"}, errors[0] if errors else "No preset could be applied.")
             return {"CANCELLED"}
 
+        # Only the last report reaches the status bar, so a partial failure has
+        # to be part of the same message or the user never sees it.
         if errors:
-            self.report({"WARNING"}, f"{errors[0]} ({len(errors)} volume(s) skipped)")
-        self.report({"INFO"}, f"Applied '{self.preset}' to {applied} volume(s).")
+            self.report(
+                {"WARNING"},
+                f"Applied '{self.preset}' to {applied} volume(s); "
+                f"{len(errors)} skipped: {errors[0]}",
+            )
+        else:
+            self.report({"INFO"}, f"Applied '{self.preset}' to {applied} volume(s).")
         return {"FINISHED"}
 
 
@@ -221,8 +228,15 @@ class MEDBLEND_OT_Select_Vdb_Temp_Dir(bpy.types.Operator):
     def execute(self, context):
         prefs = _get_prefs(context)
         if not prefs:
+            self.report({"ERROR"}, "MedBlend preferences are not available.")
             return {"CANCELLED"}
-        selected_dir = Path(self.directory) if self.directory else Path(self.filepath)
+        # Path("") is Path("."), so accepting an empty selection would quietly
+        # point the VDB directory at Blender's working directory.
+        raw = self.directory or self.filepath
+        if not raw:
+            self.report({"ERROR"}, "No directory was selected.")
+            return {"CANCELLED"}
+        selected_dir = Path(raw)
         if selected_dir.is_file():
             selected_dir = selected_dir.parent
         prefs.vdb_temp_dir = bpy.path.abspath(str(selected_dir))
@@ -324,6 +338,22 @@ class MEDBLEND_OT_Load_Structures(bpy.types.Operator, ImportHelper):
         return _run_import(self, load_structures)
 
 
+#: Menu entries for File > Import. The manifest tags MedBlend as
+#: Import-Export, and Blender users reach importers through this menu at least
+#: as often as through a sidebar panel.
+_FILE_IMPORT_ENTRIES = (
+    ("medblend.load_ct", "DICOM Image Series (CT/MR)"),
+    ("medblend.load_dose", "DICOM RT Dose"),
+    ("medblend.load_structures", "DICOM RT Structure Set"),
+    ("medblend.load_proton", "DICOM RT Ion Plan (proton spots)"),
+)
+
+
+def _draw_file_import_menu(self, _context):
+    for operator_id, label in _FILE_IMPORT_ENTRIES:
+        self.layout.operator(operator_id, text=label)
+
+
 classes: tuple[type, ...] = (
     MEDBLEND_Preferences,
     MEDBLEND_VolumePresetSettings,
@@ -346,8 +376,18 @@ def register():
         type=MEDBLEND_VolumePresetSettings
     )
 
+    bpy.types.TOPBAR_MT_file_import.append(_draw_file_import_menu)
+
 
 def unregister():
+    try:
+        bpy.types.TOPBAR_MT_file_import.remove(_draw_file_import_menu)
+    except ValueError:
+        # The entry is absent when register() failed part-way through. Letting
+        # that escape would abandon the rest of unregister(), leaving classes
+        # registered and the add-on impossible to re-enable.
+        pass
+
     if hasattr(bpy.types.Scene, "medblend_volume_preset"):
         del bpy.types.Scene.medblend_volume_preset
 

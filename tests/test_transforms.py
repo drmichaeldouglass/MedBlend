@@ -8,10 +8,13 @@ import pytest
 from mathutils import Matrix
 
 from MedBlend.volume_utils import (
+    CT_IMPORT_INDEX_KEY,
+    _link_object_to_context_collection,
     _sanitize_filename,
     _unique_path,
     align_object_to_ct_frame,
     find_ct_anchor,
+    next_ct_import_index,
     set_object_patient_transform,
 )
 
@@ -164,6 +167,74 @@ class TestFindCtAnchor:
         bpy.data.objects.append(FakeObject())
         assert find_ct_anchor("") is None
 
+    def test_highest_import_index_wins_over_name_order(self):
+        # bpy.data.objects is ordered by name, and "CT_10" sorts before "CT_9",
+        # so name order is not import order once past nine imports.
+        newest = FakeObject(medblend_is_ct=True, **{CT_IMPORT_INDEX_KEY: 10})
+        older = FakeObject(medblend_is_ct=True, **{CT_IMPORT_INDEX_KEY: 9})
+        bpy.data.objects.extend([newest, older])
+        assert find_ct_anchor("") is newest
+
+    def test_indexed_ct_beats_an_untagged_one(self):
+        untagged = FakeObject(medblend_is_ct=True)
+        indexed = FakeObject(medblend_is_ct=True, **{CT_IMPORT_INDEX_KEY: 1})
+        bpy.data.objects.extend([indexed, untagged])
+        assert find_ct_anchor("") is indexed
+
+    def test_unreadable_index_does_not_raise(self):
+        broken = FakeObject(medblend_is_ct=True, **{CT_IMPORT_INDEX_KEY: "not a number"})
+        bpy.data.objects.append(broken)
+        assert find_ct_anchor("") is broken
+
+
+class TestCtImportIndex:
+    @pytest.fixture(autouse=True)
+    def _clear_objects(self):
+        bpy.data.objects.clear()
+        yield
+        bpy.data.objects.clear()
+
+    def test_first_import_starts_at_one(self):
+        assert next_ct_import_index() == 1
+
+    def test_index_increases_past_the_highest_present(self):
+        bpy.data.objects.append(FakeObject(**{CT_IMPORT_INDEX_KEY: 4}))
+        bpy.data.objects.append(FakeObject(**{CT_IMPORT_INDEX_KEY: 2}))
+        assert next_ct_import_index() == 5
+
+    def test_non_numeric_index_is_ignored(self):
+        bpy.data.objects.append(FakeObject(**{CT_IMPORT_INDEX_KEY: "junk"}))
+        assert next_ct_import_index() == 1
+
+
+class TestLinkObjectToCollection:
+    """Selecting the new object is a convenience and must never fail an import."""
+
+    class _Collection:
+        def __init__(self):
+            self.linked = []
+            self.objects = self
+
+        def link(self, obj):
+            self.linked.append(obj)
+
+    class _UnselectableObject:
+        def select_set(self, _value):
+            raise RuntimeError("Object can't be selected because it is not in View Layer")
+
+    def test_unselectable_object_is_still_linked(self, monkeypatch):
+        collection = self._Collection()
+        view_layer = type("_ViewLayer", (), {"objects": type("_Objs", (), {"active": None})()})()
+        monkeypatch.setattr(
+            bpy, "context", type("_Ctx", (), {"collection": collection, "view_layer": view_layer})()
+        )
+
+        obj = self._UnselectableObject()
+        # A RuntimeError here used to escape write_vdb_volume, which then
+        # re-imported the same file through the operator fallback.
+        _link_object_to_context_collection(obj)
+        assert collection.linked == [obj]
+
 
 class TestTempPaths:
     @pytest.mark.parametrize(
@@ -180,6 +251,34 @@ class TestTempPaths:
     def test_roi_names_are_sanitised_into_filenames(self, raw, expected):
         # ROI names come from the planning system and may contain separators.
         assert _sanitize_filename(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("PTV 50.4.vdb", "PTV 50.4.vdb"),
+            ("Bowel/Bag.vdb", "Bowel_Bag.vdb"),
+            # Sanitising the whole name used to leave a file called "vdb" with
+            # no extension, which Blender cannot recognise as a volume.
+            ("....vdb", "volume.vdb"),
+            ("   .vdb", "volume.vdb"),
+        ],
+    )
+    def test_the_extension_always_survives_sanitising(self, raw, expected):
+        assert _sanitize_filename(raw) == expected
+
+    @pytest.mark.parametrize("reserved", ["CON", "con", "PRN", "AUX", "NUL", "COM1", "LPT9"])
+    def test_windows_device_names_are_never_used_as_filenames(self, reserved):
+        # Opening "CON.vdb" on Windows writes to the console, not to a file.
+        result = _sanitize_filename(f"{reserved}.vdb")
+        assert result.rpartition(".")[0].upper() not in {
+            "CON", "PRN", "AUX", "NUL", "COM1", "LPT9",
+        }
+        assert result.endswith(".vdb")
+
+    def test_long_roi_names_stay_within_the_filesystem_limit(self):
+        result = _sanitize_filename("A" * 400 + ".vdb")
+        assert len(result) < 255
+        assert result.endswith(".vdb")
 
     def test_existing_files_are_never_overwritten(self, tmp_path):
         (tmp_path / "CT.vdb").write_text("first")

@@ -27,6 +27,8 @@ files = "Import DICOM data and write generated VDB files"
 [build]
 paths_exclude_pattern = [
   "__pycache__/",
+  "*.pyc",
+  ".DS_Store",
   "/.git/",
   "/.github/",
   "/.gitignore",

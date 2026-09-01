@@ -22,7 +22,12 @@ from .volume_materials import (
     DEFAULT_EMISSION_STRENGTH,
     apply_volume_preset,
 )
-from .volume_utils import set_object_patient_transform, write_vdb_volume
+from .volume_utils import (
+    CT_IMPORT_INDEX_KEY,
+    next_ct_import_index,
+    set_object_patient_transform,
+    write_vdb_volume,
+)
 
 
 def load_ct_series(
@@ -82,6 +87,7 @@ def load_ct_series(
         return False
     _output_path, ct_object = result
 
+    placement_error = None
     try:
         orientation = np.asarray(image_orientation, dtype=float)
         row_dir = orientation[:3]
@@ -113,6 +119,9 @@ def load_ct_series(
 
         frame_uid = getattr(selected_file, "FrameOfReferenceUID", "")
         ct_object["medblend_is_ct"] = True
+        # Dose and structure imports pick their alignment anchor by this index
+        # rather than by name, which does not sort in import order.
+        ct_object[CT_IMPORT_INDEX_KEY] = next_ct_import_index()
         # Volume presets read this to decide whether the voxels are in a
         # calibrated unit (Hounsfield) or a per-scan intensity range.
         ct_object["medblend_modality"] = str(getattr(selected_file, "Modality", "") or "")
@@ -140,9 +149,22 @@ def load_ct_series(
                 col_dir / col_norm,
                 row_dir / row_norm,
             )
-    except Exception:
-        # Metadata is best-effort and should not block import.
-        pass
+        else:
+            placement_error = "ImageOrientationPatient does not define a usable frame"
+    except Exception as exc:
+        # The voxels are already imported, so keep them rather than discarding
+        # a usable volume - but say so, because everything downstream (dose,
+        # structures, proton plans) co-registers through this transform.
+        placement_error = str(exc)
+
+    if placement_error:
+        show_message_box(
+            "The image volume was imported but could not be placed in DICOM "
+            f"patient coordinates ({placement_error}). It sits at the scene "
+            "origin, and dose, structures and plans will not co-register with it.",
+            "Warning",
+            "ERROR",
+        )
 
     if preset_name and preset_name != NO_PRESET:
         apply_volume_preset(
