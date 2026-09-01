@@ -12,19 +12,35 @@ class _Namespace:
         return _Namespace()
 
 
-class _Prop:
-    def __call__(self, **kwargs):
-        return None
+class _PropertyDeferred:
+    """Stand-in for the object ``bpy.props.*`` returns.
+
+    Blender registers properties by walking a class's ``__annotations__`` and
+    ignoring anything that is not one of these, so the stub returns a
+    recognisable object rather than ``None`` - a test can then tell a real
+    property declaration apart from a stringified (PEP 563) annotation.
+    """
+
+    def __init__(self, kind, **keywords):
+        self.kind = kind
+        self.keywords = keywords
+
+    def __repr__(self):
+        return f"_PropertyDeferred({self.kind})"
+
+
+def _deferred(kind):
+    return staticmethod(lambda **k: _PropertyDeferred(kind, **k))
 
 
 class props:
-    StringProperty = staticmethod(lambda **k: None)
-    BoolProperty = staticmethod(lambda **k: None)
-    FloatProperty = staticmethod(lambda **k: None)
-    IntProperty = staticmethod(lambda **k: None)
-    EnumProperty = staticmethod(lambda **k: None)
-    CollectionProperty = staticmethod(lambda **k: None)
-    PointerProperty = staticmethod(lambda **k: None)
+    StringProperty = _deferred("String")
+    BoolProperty = _deferred("Bool")
+    FloatProperty = _deferred("Float")
+    IntProperty = _deferred("Int")
+    EnumProperty = _deferred("Enum")
+    CollectionProperty = _deferred("Collection")
+    PointerProperty = _deferred("Pointer")
 
 
 class _Base:
@@ -51,6 +67,15 @@ class types:
         pass
 
     class Mesh(_Base):
+        pass
+
+    class PropertyGroup(_Base):
+        pass
+
+    class Material(_Base):
+        pass
+
+    class Scene(_Base):
         pass
 
 
