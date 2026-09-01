@@ -78,6 +78,19 @@ class types:
     class Scene(_Base):
         pass
 
+    class TOPBAR_MT_file_import(_Base):
+        """Records the draw callbacks an add-on appends to File > Import."""
+
+        _draw_funcs: list = []
+
+        @classmethod
+        def append(cls, func):
+            cls._draw_funcs.append(func)
+
+        @classmethod
+        def remove(cls, func):
+            cls._draw_funcs.remove(func)
+
 
 class _Collection(list):
     def get(self, name, default=None):

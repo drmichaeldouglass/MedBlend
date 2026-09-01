@@ -52,7 +52,7 @@ Blender installs the bundled dependency automatically. Open the 3D viewport side
 
 ## How to use MedBlend
 
-Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. 
+Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. The same four importers are also available from `File > Import` as `DICOM Image Series (CT/MR)`, `DICOM RT Dose`, `DICOM RT Structure Set` and `DICOM RT Ion Plan (proton spots)`. 
 
 If Blender cannot write temporary VDB files in its default temp location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 

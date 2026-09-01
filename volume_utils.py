@@ -39,10 +39,41 @@ def _get_vdb_temp_dir() -> Optional[Path]:
         return None
 
 
+#: Device names that cannot be opened as files on Windows, with or without an
+#: extension. An ROI legitimately called "CON" or "AUX" would otherwise write
+#: to the console/device rather than to a file.
+_WINDOWS_RESERVED_STEMS = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{digit}" for digit in range(1, 10)}
+    | {f"LPT{digit}" for digit in range(1, 10)}
+)
+
+#: Leaves room for the "_<counter>" that _unique_path appends, well inside the
+#: 255-byte component limit that every filesystem MedBlend runs on enforces.
+_MAX_STEM_LENGTH = 120
+
+
 def _sanitize_filename(name: str) -> str:
-    cleaned = "".join(char if (char.isalnum() or char in "._- ") else "_" for char in name)
-    cleaned = cleaned.strip(". ")
-    return cleaned or "volume"
+    """Make ``name`` safe to use as a file name, preserving its extension.
+
+    Only the stem is rewritten. Sanitising the whole name would let an ROI
+    called ``...`` collapse to a file with no ``.vdb`` extension at all, which
+    Blender then cannot recognise as a volume.
+    """
+
+    stem, dot, suffix = name.rpartition(".")
+    # Only split off something that is actually an extension. An ROI called
+    # "../../etc/passwd" has a trailing dot-segment that is not one, and
+    # carrying it through unsanitised would put separators back in the name.
+    if not dot or not suffix.isalnum() or len(suffix) > 8:
+        stem, suffix = name, ""
+
+    cleaned = "".join(char if (char.isalnum() or char in "._- ") else "_" for char in stem)
+    cleaned = cleaned.strip(". ")[:_MAX_STEM_LENGTH].strip(". ")
+    if not cleaned or cleaned.upper() in _WINDOWS_RESERVED_STEMS:
+        cleaned = f"{cleaned}_volume" if cleaned else "volume"
+
+    return f"{cleaned}.{suffix}" if suffix else cleaned
 
 
 def _unique_path(base_dir: Path, target_name: str) -> Path:
@@ -89,8 +120,29 @@ def resolve_temp_path(target_name: str) -> Path:
     return _unique_path(base_dir, _sanitize_filename(target_name))
 
 
+#: Custom property recording the order CT volumes were imported in.
+CT_IMPORT_INDEX_KEY = "medblend_ct_import_index"
+
+
+def next_ct_import_index() -> int:
+    """Return an import index one past the highest already in the scene."""
+
+    highest = 0
+    for obj in bpy.data.objects:
+        try:
+            highest = max(highest, int(obj.get(CT_IMPORT_INDEX_KEY, 0)))
+        except (TypeError, ValueError):
+            continue
+    return highest + 1
+
+
 def find_ct_anchor(frame_uid: str) -> Optional[bpy.types.Object]:
-    """Return the most recently imported CT object matching ``frame_uid``."""
+    """Return the most recently imported CT object matching ``frame_uid``.
+
+    ``bpy.data.objects`` is ordered by name rather than by creation, and the
+    names MedBlend generates do not sort in import order past nine imports
+    ("CT_10" precedes "CT_9"), so the recorded import index decides instead.
+    """
 
     ct_candidates = [obj for obj in bpy.data.objects if bool(obj.get("medblend_is_ct"))]
     if frame_uid:
@@ -99,14 +151,31 @@ def find_ct_anchor(frame_uid: str) -> Optional[bpy.types.Object]:
         ]
     if not ct_candidates:
         return None
-    return ct_candidates[-1]
+
+    def _import_order(entry) -> tuple[int, int]:
+        position, obj = entry
+        try:
+            return int(obj.get(CT_IMPORT_INDEX_KEY, 0)), position
+        except (TypeError, ValueError):
+            return 0, position
+
+    # Position breaks ties for CT objects carrying no index - volumes imported
+    # by an older MedBlend, or tagged by hand.
+    return max(enumerate(ct_candidates), key=_import_order)[1]
 
 
 def _link_object_to_context_collection(obj: bpy.types.Object) -> None:
     collection = bpy.context.collection or bpy.context.scene.collection
     collection.objects.link(obj)
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
+    # Making the new object active and selected is a convenience, not part of
+    # the import. Both raise for a collection excluded from the view layer, and
+    # letting that escape would make the caller treat a written volume as a
+    # failure - and re-import the same file through the operator fallback.
+    try:
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+    except (RuntimeError, ReferenceError, AttributeError):
+        pass
 
 
 def set_object_patient_transform(

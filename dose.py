@@ -137,6 +137,7 @@ def load_dose(file_path: Path) -> bool:
         return False
     _output_path, dose_object = result
 
+    placement_error = None
     try:
         dose_origin = np.asarray(getattr(dataset, "ImagePositionPatient", [0.0, 0.0, 0.0]), dtype=float)
         orientation = np.asarray(getattr(dataset, "ImageOrientationPatient", [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]), dtype=float)
@@ -183,9 +184,19 @@ def load_dose(file_path: Path) -> bool:
                 row_axis_dir,
                 col_axis_dir,
             )
-    except Exception:
-        # Best-effort spatial alignment only; fallback keeps legacy behaviour.
-        pass
+    except Exception as exc:
+        # The grid is already imported; keep it rather than discarding a usable
+        # dose distribution, but do not let a misplaced dose look co-registered.
+        placement_error = str(exc)
+
+    if placement_error:
+        show_message_box(
+            "The dose grid was imported but could not be placed in DICOM patient "
+            f"coordinates ({placement_error}). It sits at the scene origin and "
+            "will not line up with the image volume.",
+            "Warning",
+            "ERROR",
+        )
 
     dose_object["medblend_dose_max"] = float(np.max(dose_matrix)) if dose_matrix.size else 0.0
     dose_object["medblend_dose_units"] = str(getattr(dataset, "DoseUnits", "") or "")
