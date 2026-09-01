@@ -7,7 +7,13 @@ from pathlib import Path
 import numpy as np
 import pydicom
 
-from .dicom_util import check_dicom_image_type, float_or, is_structure_file, positive_float_or
+from .dicom_util import (
+    check_dicom_image_type,
+    float_or,
+    image_orientation_axes,
+    is_structure_file,
+    positive_float_or,
+)
 from .node_groups import apply_structure_material
 from .ui_utils import show_message_box
 from .volume_utils import (
@@ -128,17 +134,29 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
     if orientation.size != 6:
         raise ValueError("Invalid ImageOrientationPatient in referenced images.")
 
-    row_dir = orientation[:3]
-    col_dir = orientation[3:]
-    normal_dir = np.cross(row_dir, col_dir)
-    normal_norm = np.linalg.norm(normal_dir)
-    if normal_norm == 0:
-        raise ValueError("Invalid orientation vectors in referenced images.")
-    normal_dir = normal_dir / normal_norm
+    try:
+        row_dir, col_dir, normal_dir = image_orientation_axes(orientation)
+    except ValueError as exc:
+        raise ValueError(f"Invalid orientation vectors in referenced images: {exc}") from exc
 
     # Sort slices along the slice normal direction.
-    projections = [float(np.dot(np.asarray(ds.ImagePositionPatient, dtype=float), normal_dir)) for ds in image_slices]
-    sorted_pairs = sorted(zip(projections, image_slices), key=lambda pair: pair[0])
+    positions = []
+    for slice_number, image_slice in enumerate(image_slices, start=1):
+        try:
+            position = np.asarray(image_slice.ImagePositionPatient, dtype=float).reshape(-1)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Referenced image {slice_number} has invalid ImagePositionPatient."
+            ) from exc
+        if position.size != 3 or not np.all(np.isfinite(position)):
+            raise ValueError(
+                f"Referenced image {slice_number} has invalid ImagePositionPatient."
+            )
+        positions.append(position)
+    projections = [float(np.dot(position, normal_dir)) for position in positions]
+    sorted_pairs = sorted(
+        zip(projections, image_slices, strict=True), key=lambda pair: pair[0]
+    )
     sorted_projections = [pair[0] for pair in sorted_pairs]
     sorted_slices = [pair[1] for pair in sorted_pairs]
 
@@ -176,6 +194,43 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
     cols = int(getattr(sorted_slices[0], "Columns", 0))
     if rows <= 0 or cols <= 0:
         raise ValueError("Referenced images have invalid Rows/Columns.")
+
+    for slice_number, image_slice in enumerate(sorted_slices[1:], start=2):
+        current_rows = int(getattr(image_slice, "Rows", 0))
+        current_cols = int(getattr(image_slice, "Columns", 0))
+        if (current_rows, current_cols) != (rows, cols):
+            raise ValueError(
+                f"Referenced image {slice_number} has Rows/Columns "
+                f"{current_rows}x{current_cols}, expected {rows}x{cols}."
+            )
+
+        try:
+            current_orientation = np.asarray(
+                image_slice.ImageOrientationPatient, dtype=float
+            )
+            current_spacing = np.asarray(image_slice.PixelSpacing, dtype=float)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Referenced image {slice_number} has invalid orientation or spacing."
+            ) from exc
+        if (
+            current_orientation.size != 6
+            or not np.all(np.isfinite(current_orientation))
+            or not np.allclose(current_orientation, orientation, rtol=1e-5, atol=1e-6)
+        ):
+            raise ValueError(
+                f"Referenced image {slice_number} has inconsistent ImageOrientationPatient."
+            )
+        if (
+            current_spacing.size < 2
+            or not np.all(np.isfinite(current_spacing[:2]))
+            or not np.allclose(
+                current_spacing[:2], [row_spacing, col_spacing], rtol=1e-4, atol=1e-3
+            )
+        ):
+            raise ValueError(
+                f"Referenced image {slice_number} has inconsistent PixelSpacing."
+            )
 
     # Basis for [row_index, col_index, slice_index] coordinates.
     row_axis = col_dir * row_spacing

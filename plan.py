@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -11,12 +12,32 @@ import pydicom
 from mathutils import Matrix
 
 from .blender_utils import add_data_fields, create_object
-from .dicom_util import float_or
 from .node_groups import apply_proton_spots_geo_nodes
 from .ui_utils import show_message_box
 
 
 RT_ION_PLAN_STORAGE_UID = "1.2.840.10008.5.1.4.1.1.481.8"
+
+
+@dataclass(frozen=True)
+class _BeamGeometry:
+    """Patient-space geometry inherited at one ion control point."""
+
+    gantry_angle: float = 0.0
+    couch_angle: float = 0.0
+    isocenter_mm: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+@dataclass
+class _SpotGroup:
+    """Spots that share one patient-space beam transform."""
+
+    geometry: _BeamGeometry
+    x_vals: list[float] = field(default_factory=list)
+    y_vals: list[float] = field(default_factory=list)
+    energies: list[float] = field(default_factory=list)
+    weights: list[float] = field(default_factory=list)
+    control_point_indices: list[int] = field(default_factory=list)
 
 
 def is_proton_plan(ds: pydicom.Dataset) -> bool:
@@ -119,6 +140,136 @@ def _patient_position(dataset: pydicom.Dataset) -> str:
     return ""
 
 
+def _radiation_type(beam: pydicom.Dataset) -> str:
+    """Return the normalised DICOM Radiation Type for an ion beam."""
+
+    return str(getattr(beam, "RadiationType", "") or "").strip().upper()
+
+
+def _finite_float(value, attribute_name: str) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{attribute_name} is non-numeric") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{attribute_name} must be finite")
+    return result
+
+
+def _control_point_geometry(
+    control_point: pydicom.Dataset,
+    previous: _BeamGeometry | None = None,
+) -> _BeamGeometry:
+    """Resolve geometry at a control point, inheriting omitted attributes.
+
+    DICOM permits attributes that remain constant for the whole beam to be
+    present only at the first control point. Treating an omitted gantry,
+    patient-support angle, or isocentre as zero on every later energy layer
+    rotates or translates otherwise valid spot maps away from the patient.
+    """
+
+    if previous is None:
+        previous = _BeamGeometry()
+
+    raw_gantry = getattr(control_point, "GantryAngle", None)
+    gantry_angle = (
+        previous.gantry_angle
+        if raw_gantry in (None, "")
+        else _finite_float(raw_gantry, "GantryAngle")
+    )
+
+    raw_couch = getattr(control_point, "PatientSupportAngle", None)
+    couch_angle = (
+        previous.couch_angle
+        if raw_couch in (None, "")
+        else _finite_float(raw_couch, "PatientSupportAngle")
+    )
+
+    raw_isocenter = getattr(control_point, "IsocenterPosition", None)
+    if raw_isocenter is None:
+        isocenter_mm = previous.isocenter_mm
+    else:
+        try:
+            value_count = len(raw_isocenter)
+        except TypeError as exc:
+            raise ValueError("IsocenterPosition must contain three values") from exc
+        if value_count == 0:
+            isocenter_mm = previous.isocenter_mm
+        elif value_count != 3:
+            raise ValueError("IsocenterPosition must contain three values")
+        else:
+            isocenter_mm = tuple(
+                _finite_float(value, "IsocenterPosition") for value in raw_isocenter
+            )
+
+    return _BeamGeometry(gantry_angle, couch_angle, isocenter_mm)
+
+
+def _collect_spot_groups(
+    control_points: Iterable[pydicom.Dataset],
+) -> tuple[list[_SpotGroup], list[str]]:
+    """Collect irradiation-segment spot maps by their patient transform.
+
+    Every DICOM ion irradiation segment is a pair of control points. The
+    first item carries the delivered spot weights. Separate transforms are
+    retained for stepped or dynamic arc plans instead of placing the entire
+    beam at the geometry of control point zero.
+    """
+
+    control_points = list(control_points)
+    warnings: list[str] = []
+    resolved_geometry: list[_BeamGeometry | None] = []
+    current_geometry = _BeamGeometry()
+
+    for index, control_point in enumerate(control_points):
+        try:
+            current_geometry = _control_point_geometry(control_point, current_geometry)
+            resolved_geometry.append(current_geometry)
+        except ValueError as exc:
+            resolved_geometry.append(None)
+            warnings.append(f"control point {index} has invalid geometry: {exc}")
+
+    if len(control_points) % 2:
+        warnings.append(
+            "the IonControlPointSequence has an odd number of control points; "
+            "the final unpaired control point was interpreted as a segment start"
+        )
+
+    groups_by_geometry: dict[_BeamGeometry, _SpotGroup] = {}
+    for index in range(0, len(control_points), 2):
+        geometry = resolved_geometry[index]
+        if geometry is None:
+            continue
+
+        control_point = control_points[index]
+        try:
+            positions, weights, nominal_energy = _spot_control_point_data(control_point)
+        except ValueError as exc:
+            warnings.append(f"control point {index} was skipped: {exc}")
+            continue
+
+        end_index = index + 1
+        if end_index < len(control_points):
+            end_geometry = resolved_geometry[end_index]
+            if end_geometry is not None and end_geometry != geometry:
+                warnings.append(
+                    f"control point pair {index}-{end_index} changes gantry, couch, or "
+                    "isocentre during irradiation; its spots are shown at the segment's "
+                    "starting geometry"
+                )
+
+        group = groups_by_geometry.setdefault(geometry, _SpotGroup(geometry))
+        group.control_point_indices.append(index)
+        for spot_index, weight in enumerate(weights):
+            position_index = spot_index * 2
+            group.x_vals.append(positions[position_index] / 1000.0)
+            group.y_vals.append(positions[position_index + 1] / 1000.0)
+            group.energies.append(nominal_energy)
+            group.weights.append(weight)
+
+    return list(groups_by_geometry.values()), warnings
+
+
 # The Proton_Spots node group places each spot at the object-local position
 # (spot_x, spot_y, spot_E), so the object's local axes are the IEC 61217 beam
 # limiting device axes. For a head-first supine patient at gantry and couch
@@ -133,6 +284,18 @@ def _patient_position(dataset: pydicom.Dataset) -> str:
 # anterior-posterior instead of superior-inferior, and the gantry rotation
 # about +Z never moves the beam axis off the patient's long axis at all.
 IEC_BEAM_TO_DICOM = Matrix.Rotation(math.radians(90.0), 4, "X")
+
+
+def _beam_world_matrix_from_geometry(geometry: _BeamGeometry) -> Matrix:
+    """Build a beam transform from already-resolved DICOM geometry."""
+
+    rotation = (
+        Matrix.Rotation(math.radians(geometry.couch_angle), 4, "Y")
+        @ Matrix.Rotation(math.radians(geometry.gantry_angle), 4, "Z")
+        @ IEC_BEAM_TO_DICOM
+    )
+    translation = tuple(value / 1000.0 for value in geometry.isocenter_mm)
+    return Matrix.Translation(translation) @ rotation
 
 
 def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
@@ -151,21 +314,7 @@ def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
     change it, not this matrix.
     """
 
-    gantry_angle = float_or(getattr(control_point, "GantryAngle", None), 0.0)
-    couch_angle = float_or(getattr(control_point, "PatientSupportAngle", None), 0.0)
-    # IsocenterPosition is Type 1C and may be absent or empty on the first
-    # control point, in which case the beam sits at the scene origin.
-    iso_center_raw = getattr(control_point, "IsocenterPosition", None) or (0.0, 0.0, 0.0)
-    iso_center = tuple(float_or(value, 0.0) / 1000.0 for value in iso_center_raw)
-    if len(iso_center) != 3:
-        iso_center = (0.0, 0.0, 0.0)
-
-    rotation = (
-        Matrix.Rotation(math.radians(couch_angle), 4, "Y")
-        @ Matrix.Rotation(math.radians(gantry_angle), 4, "Z")
-        @ IEC_BEAM_TO_DICOM
-    )
-    return Matrix.Translation(iso_center) @ rotation
+    return _beam_world_matrix_from_geometry(_control_point_geometry(control_point))
 
 
 def load_proton_plan(file_path: Path) -> bool:
@@ -192,73 +341,77 @@ def load_proton_plan(file_path: Path) -> bool:
         )
 
     imported_beam_count = 0
+    imported_object_count = 0
 
     for beam_index, beam in enumerate(ion_beams):
+        radiation_type = _radiation_type(beam)
+        if radiation_type and radiation_type != "PROTON":
+            warnings.append(
+                f"Beam {beam_index} uses RadiationType {radiation_type} and was skipped; "
+                "MedBlend's spot visualisation is proton-specific."
+            )
+            continue
+        if not radiation_type:
+            warnings.append(
+                f"Beam {beam_index} is missing RadiationType; it was treated as PROTON."
+            )
+
         control_points = getattr(beam, "IonControlPointSequence", None)
         if not control_points:
             warnings.append(f"Beam {beam_index} has no control points.")
             continue
 
-        num_control_points = len(control_points)
-
-        x_vals: list[float] = []
-        y_vals: list[float] = []
-        energies: list[float] = []
-        spot_weights: list[float] = []
-
-        # Spot data lives on the first control point of each pair; the second
-        # of a pair only carries cumulative meterset bookkeeping.
-        for idx in range(0, num_control_points, 2):
-            control_point = control_points[idx]
-            try:
-                positions, weights, nominal_energy = _spot_control_point_data(control_point)
-            except ValueError as exc:
-                warnings.append(
-                    f"Beam {beam_index} control point {idx} was skipped: {exc}."
-                )
-                continue
-
-            spot_count = len(weights)
-            for spot_index in range(spot_count):
-                pos_index = spot_index * 2
-                x_vals.append(positions[pos_index] / 1000.0)
-                y_vals.append(positions[pos_index + 1] / 1000.0)
-                energies.append(nominal_energy)
-                spot_weights.append(weights[spot_index])
-
-        count = len(spot_weights)
-        if count == 0:
+        spot_groups, beam_warnings = _collect_spot_groups(control_points)
+        warnings.extend(f"Beam {beam_index} {message}." for message in beam_warnings)
+        if not spot_groups:
             warnings.append(f"Beam {beam_index} did not contain any valid scan spot data.")
             continue
 
-        mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}")
-        # Add the vertices before the attribute layers so each layer is created
-        # already sized to the point domain.
-        mesh.vertices.add(count)
-        add_data_fields(mesh, ["spot_x", "spot_y", "spot_E", "spot_weight"])
+        beam_name = str(getattr(beam, "BeamName", "") or "")
+        try:
+            beam_number = int(getattr(beam, "BeamNumber", beam_index))
+        except (TypeError, ValueError, OverflowError):
+            beam_number = beam_index
+            warnings.append(
+                f"Beam {beam_index} has an invalid BeamNumber; index {beam_index} was used."
+            )
+        imported_group_count = 0
+        for group_index, group in enumerate(spot_groups):
+            count = len(group.weights)
+            suffix = "" if len(spot_groups) == 1 else f"_{group_index}"
+            mesh = bpy.data.meshes.new(name=f"proton_spots_{beam_index}{suffix}")
+            # Add the vertices before the attribute layers so each layer is
+            # created already sized to the point domain.
+            mesh.vertices.add(count)
+            add_data_fields(mesh, ["spot_x", "spot_y", "spot_E", "spot_weight"])
 
-        mesh.attributes["spot_x"].data.foreach_set("value", x_vals)
-        mesh.attributes["spot_y"].data.foreach_set("value", y_vals)
-        mesh.attributes["spot_E"].data.foreach_set("value", energies)
-        mesh.attributes["spot_weight"].data.foreach_set("value", spot_weights)
-        coords = [0.0] * (count * 3)
-        coords[::3] = [0.01 * row for row in range(count)]
-        mesh.vertices.foreach_set("co", coords)
+            mesh.attributes["spot_x"].data.foreach_set("value", group.x_vals)
+            mesh.attributes["spot_y"].data.foreach_set("value", group.y_vals)
+            mesh.attributes["spot_E"].data.foreach_set("value", group.energies)
+            mesh.attributes["spot_weight"].data.foreach_set("value", group.weights)
+            coords = [0.0] * (count * 3)
+            coords[::3] = [0.01 * row for row in range(count)]
+            mesh.vertices.foreach_set("co", coords)
 
-        mesh.validate()
-        mesh.update()
+            mesh.validate()
+            mesh.update()
 
-        if mesh.vertices:
+            if not mesh.vertices:
+                bpy.data.meshes.remove(mesh)
+                continue
+
             obj = create_object(mesh, mesh.name)
-            obj.matrix_world = _beam_world_matrix(control_points[0])
-            obj["medblend_beam_number"] = int(float_or(getattr(beam, "BeamNumber", beam_index), beam_index))
-            beam_name = str(getattr(beam, "BeamName", "") or "")
+            obj.matrix_world = _beam_world_matrix_from_geometry(group.geometry)
+            obj["medblend_beam_number"] = beam_number
+            obj["medblend_control_point_indices"] = group.control_point_indices
             if beam_name:
                 obj["medblend_beam_name"] = beam_name
             apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots", obj=obj)
+            imported_group_count += 1
+            imported_object_count += 1
+
+        if imported_group_count:
             imported_beam_count += 1
-        else:
-            bpy.data.meshes.remove(mesh)
 
     if imported_beam_count == 0:
         show_message_box(
@@ -273,7 +426,8 @@ def load_proton_plan(file_path: Path) -> bool:
         if len(warnings) > 3:
             preview += f"; and {len(warnings) - 3} more"
         show_message_box(
-            f"Imported {imported_beam_count} beam(s) with {len(warnings)} warning(s): {preview}",
+            f"Imported {imported_beam_count} beam(s) as {imported_object_count} object(s) "
+            f"with {len(warnings)} warning(s): {preview}",
             "Proton Import Warnings",
             "INFO",
         )

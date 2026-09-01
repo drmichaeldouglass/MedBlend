@@ -96,7 +96,8 @@ def _material_has_color(material: bpy.types.Material, rgba: Sequence[float]) -> 
         return False
     try:
         return len(existing) >= 4 and all(
-            abs(float(a) - float(b)) <= 1e-6 for a, b in zip(rgba, existing)
+            abs(float(a) - float(b)) <= 1e-6
+            for a, b in zip(rgba, existing, strict=True)
         )
     except (TypeError, ValueError):
         return False

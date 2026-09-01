@@ -1,5 +1,6 @@
 # Dependencies for running the test suite outside Blender.
 # bpy/mathutils are replaced by the lightweight stubs in tests/stubs.
 numpy
-pydicom
+pydicom==3.0.1
 pytest
+ruff

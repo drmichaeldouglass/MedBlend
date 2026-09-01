@@ -341,6 +341,17 @@ class TestGeometryFallbacks:
         with pytest.raises(ValueError, match="slice spacing is non-uniform"):
             _build_geometry(slices)
 
+    def test_build_geometry_rejects_inconsistent_pixel_spacing(self):
+        slices = [make_slice(0.0, instance=0), make_slice(2.0, instance=1)]
+        slices[1].PixelSpacing = [1.0, 2.0]
+        with pytest.raises(ValueError, match="inconsistent PixelSpacing"):
+            _build_geometry(slices)
+
+    def test_build_geometry_rejects_inconsistent_matrix_size(self):
+        slices = [make_slice(0.0, instance=0), make_slice(2.0, rows=3, instance=1)]
+        with pytest.raises(ValueError, match="Rows/Columns"):
+            _build_geometry(slices)
+
 
 class TestLoadReferenceImageSlices:
     def _write_series(self, folder, names, z_values=(0.0, 3.0, 6.0, 9.0)):

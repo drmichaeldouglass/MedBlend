@@ -200,7 +200,9 @@ def evaluate(points: Sequence[Sequence[float]], scalar: float) -> Tuple[float, .
     weight = (scalar - float(point[0])) / (float(following[0]) - float(point[0]))
     return tuple(
         value + (following_value - value) * weight
-        for value, following_value in zip(_values(point), _values(following))
+        for value, following_value in zip(
+            _values(point), _values(following), strict=True
+        )
     )
 
 
@@ -233,7 +235,8 @@ def _separate_stops(stops: Sequence[RampStop]) -> list[RampStop]:
     """Force strictly increasing positions, keeping steps as sharp as possible."""
 
     separated: list[RampStop] = []
-    for position, values in stops:
+    for original_position, values in stops:
+        position = original_position
         if separated:
             minimum = separated[-1][0] + _MIN_STOP_SEPARATION
             if position < minimum:

@@ -89,6 +89,7 @@ jobs:
                   "blender_manifest.toml",
                   "LICENSE",
                   "THIRD_PARTY_NOTICES.md",
+                  "assets/MedBlend_Assets.blend",
                   "licenses/Slicer-License.txt",
                   "wheels/pydicom-3.0.1-py3-none-any.whl",
               }

@@ -218,7 +218,10 @@ def _matches(
     except (TypeError, ValueError):
         return False
 
-    return all(abs(a - b) <= _FLOAT_TOLERANCE for a, b in zip(expected, actual))
+    return all(
+        abs(a - b) <= _FLOAT_TOLERANCE
+        for a, b in zip(expected, actual, strict=True)
+    )
 
 
 def _candidate_name(base_name: str, counter: int) -> str:

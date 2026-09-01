@@ -10,6 +10,7 @@ import pydicom
 from .dicom_util import (
     check_dicom_image_type,
     extract_dicom_data,
+    image_orientation_axes,
     load_dicom_series,
     rescale_dicom_image,
     sort_slices_spatially,
@@ -89,15 +90,7 @@ def load_ct_series(
 
     placement_error = None
     try:
-        orientation = np.asarray(image_orientation, dtype=float)
-        row_dir = orientation[:3]
-        col_dir = orientation[3:]
-        normal_dir = np.cross(row_dir, col_dir)
-        normal_norm = float(np.linalg.norm(normal_dir))
-        if normal_norm > 0:
-            normal_dir = normal_dir / normal_norm
-        else:
-            normal_dir = np.asarray([0.0, 0.0, 1.0], dtype=float)
+        row_dir, col_dir, normal_dir = image_orientation_axes(image_orientation)
 
         # Array axis 0 is flipped in extract_dicom_data, so the imported array origin
         # corresponds to the final source slice position.
@@ -139,18 +132,13 @@ def load_ct_series(
         # Place the CT in DICOM patient coordinates (mm -> m) so dose,
         # structures, and proton plans land in the same frame regardless of
         # import order.
-        row_norm = float(np.linalg.norm(row_dir))
-        col_norm = float(np.linalg.norm(col_dir))
-        if row_norm > 0 and col_norm > 0 and normal_norm > 0:
-            set_object_patient_transform(
-                ct_object,
-                array_origin,
-                -normal_dir,
-                col_dir / col_norm,
-                row_dir / row_norm,
-            )
-        else:
-            placement_error = "ImageOrientationPatient does not define a usable frame"
+        set_object_patient_transform(
+            ct_object,
+            array_origin,
+            -normal_dir,
+            col_dir,
+            row_dir,
+        )
     except Exception as exc:
         # The voxels are already imported, so keep them rather than discarding
         # a usable volume - but say so, because everything downstream (dose,

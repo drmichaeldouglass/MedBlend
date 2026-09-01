@@ -83,6 +83,10 @@ def rescale_dicom_image(array: np.ndarray) -> Tuple[np.ndarray, float, float]:
     """
 
     array = np.asarray(array, dtype=np.float32)
+    if array.size == 0:
+        raise ValueError("DICOM image data is empty")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("DICOM image data contains non-finite intensity values")
     min_value = float(np.min(array))
     max_value = float(np.max(array))
     if max_value == min_value:
@@ -107,14 +111,44 @@ def sort_by_instance_number(images: Iterable[pydicom.Dataset]) -> List[pydicom.D
 
 
 def _slice_normal(ds: pydicom.Dataset) -> np.ndarray | None:
-    orientation = np.asarray(getattr(ds, "ImageOrientationPatient", []), dtype=float)
-    if orientation.size != 6:
+    try:
+        _row_dir, _col_dir, normal = image_orientation_axes(
+            getattr(ds, "ImageOrientationPatient", None)
+        )
+    except ValueError:
         return None
-    normal = np.cross(orientation[:3], orientation[3:])
-    norm = float(np.linalg.norm(normal))
-    if norm <= 0:
-        return None
-    return normal / norm
+    return normal
+
+
+def image_orientation_axes(
+    image_orientation,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return normalised row, column, and slice axes from DICOM orientation."""
+
+    try:
+        orientation = np.asarray(image_orientation, dtype=float).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("ImageOrientationPatient must contain six numeric values") from exc
+    if orientation.size != 6 or not np.all(np.isfinite(orientation)):
+        raise ValueError("ImageOrientationPatient must contain six finite values")
+
+    row_dir = orientation[:3]
+    col_dir = orientation[3:]
+    row_norm = float(np.linalg.norm(row_dir))
+    col_norm = float(np.linalg.norm(col_dir))
+    if row_norm <= 1e-8 or col_norm <= 1e-8:
+        raise ValueError("ImageOrientationPatient contains a zero-length direction")
+
+    row_dir = row_dir / row_norm
+    col_dir = col_dir / col_norm
+    if abs(float(np.dot(row_dir, col_dir))) > 1e-4:
+        raise ValueError("ImageOrientationPatient row and column directions are not orthogonal")
+
+    normal_dir = np.cross(row_dir, col_dir)
+    normal_norm = float(np.linalg.norm(normal_dir))
+    if normal_norm <= 1e-8:
+        raise ValueError("ImageOrientationPatient does not define a usable slice direction")
+    return row_dir, col_dir, normal_dir / normal_norm
 
 
 def sort_slices_spatially(images: Sequence[pydicom.Dataset]) -> List[pydicom.Dataset]:
@@ -139,7 +173,12 @@ def sort_slices_spatially(images: Sequence[pydicom.Dataset]) -> List[pydicom.Dat
     if max(projections) - min(projections) <= 1e-6:
         return sort_by_instance_number(images)
 
-    return [ds for _, ds in sorted(zip(projections, images), key=lambda pair: pair[0])]
+    return [
+        ds
+        for _, ds in sorted(
+            zip(projections, images, strict=True), key=lambda pair: pair[0]
+        )
+    ]
 
 
 def _compute_slice_spacing(
@@ -215,6 +254,30 @@ def positive_float_or(value, default: float) -> float:
 _float_or = float_or
 
 
+def _optional_numeric_vector(
+    value,
+    expected_length: int,
+    attribute_name: str,
+    slice_number: int,
+) -> np.ndarray | None:
+    """Coerce an optional DICOM vector and give geometry errors context."""
+
+    if value is None:
+        return None
+    try:
+        vector = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Slice {slice_number} has a non-numeric {attribute_name}."
+        ) from exc
+    if vector.size != expected_length or not np.all(np.isfinite(vector)):
+        raise ValueError(
+            f"Slice {slice_number} has an invalid {attribute_name}; "
+            f"expected {expected_length} finite values."
+        )
+    return vector
+
+
 def extract_dicom_data(
     images: Sequence[pydicom.Dataset],
 ) -> Tuple[np.ndarray, Sequence[float], Sequence[float], float, Sequence[float], Sequence[float]]:
@@ -223,7 +286,20 @@ def extract_dicom_data(
     if not images:
         raise ValueError("No DICOM images were provided for extraction")
 
+    first = images[0]
     expected_shape = None
+    reference_orientation = _optional_numeric_vector(
+        getattr(first, "ImageOrientationPatient", None),
+        6,
+        "ImageOrientationPatient",
+        1,
+    )
+    reference_spacing = _optional_numeric_vector(
+        getattr(first, "PixelSpacing", None),
+        2,
+        "PixelSpacing",
+        1,
+    )
     dicom_3d_array = []
     slice_positions = []
     for index, dataset in enumerate(images):
@@ -251,19 +327,60 @@ def extract_dicom_data(
                 "series must share the same matrix size."
             )
 
+        orientation = _optional_numeric_vector(
+            getattr(dataset, "ImageOrientationPatient", None),
+            6,
+            "ImageOrientationPatient",
+            index + 1,
+        )
+        pixel_spacing = _optional_numeric_vector(
+            getattr(dataset, "PixelSpacing", None),
+            2,
+            "PixelSpacing",
+            index + 1,
+        )
+        if (orientation is None) != (reference_orientation is None) or (
+            orientation is not None
+            and not np.allclose(orientation, reference_orientation, rtol=1e-5, atol=1e-6)
+        ):
+            raise ValueError(
+                f"Slice {index + 1} has ImageOrientationPatient inconsistent with slice 1."
+            )
+        if (pixel_spacing is None) != (reference_spacing is None) or (
+            pixel_spacing is not None
+            and not np.allclose(pixel_spacing, reference_spacing, rtol=1e-4, atol=1e-3)
+        ):
+            raise ValueError(f"Slice {index + 1} has PixelSpacing inconsistent with slice 1.")
+
         # Apply the modality LUT per slice: RescaleSlope/Intercept may differ
         # between slices, in which case raw stored values are not comparable.
         slope = float_or(getattr(dataset, "RescaleSlope", 1.0), 1.0)
         intercept = float_or(getattr(dataset, "RescaleIntercept", 0.0), 0.0)
+        if not np.isfinite(slope) or not np.isfinite(intercept):
+            raise ValueError(
+                f"Slice {index + 1} has a non-finite RescaleSlope or RescaleIntercept."
+            )
         if slope != 1.0 or intercept != 0.0:
             pixels = pixels * np.float32(slope) + np.float32(intercept)
+        if not np.all(np.isfinite(pixels)):
+            raise ValueError(f"Slice {index + 1} contains non-finite intensity values.")
         dicom_3d_array.append(pixels)
-        slice_positions.append(getattr(dataset, "ImagePositionPatient", (0.0, 0.0, 0.0)))
+        raw_position = getattr(dataset, "ImagePositionPatient", None)
+        if raw_position is None:
+            slice_positions.append((0.0, 0.0, 0.0))
+        else:
+            slice_positions.append(
+                _optional_numeric_vector(
+                    raw_position,
+                    3,
+                    "ImagePositionPatient",
+                    index + 1,
+                )
+            )
 
     array = np.asarray(dicom_3d_array, dtype=np.float32)
     array = np.flipud(array)
 
-    first = images[0]
     spacing = getattr(first, "PixelSpacing", (1.0, 1.0))
     if spacing is None or len(spacing) < 2:
         spacing = (1.0, 1.0)

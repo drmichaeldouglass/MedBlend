@@ -16,7 +16,10 @@ from MedBlend.plan import (
     RT_ION_PLAN_STORAGE_UID,
     _as_float_list,
     _beam_world_matrix,
+    _collect_spot_groups,
+    _control_point_geometry,
     _patient_position,
+    _radiation_type,
     _spot_control_point_data,
     is_proton_plan,
 )
@@ -84,6 +87,23 @@ class TestPlanHelpers:
     def test_patient_position_missing_is_blank(self):
         assert _patient_position(Dataset()) == ""
 
+    def test_radiation_type_is_normalised(self):
+        beam = Dataset()
+        beam.RadiationType = " proton "
+        assert _radiation_type(beam) == "PROTON"
+
+    def test_control_point_geometry_inherits_omitted_values(self):
+        first = Dataset()
+        first.GantryAngle = 37.0
+        first.PatientSupportAngle = 12.0
+        first.IsocenterPosition = [10.0, -20.0, 300.0]
+
+        inherited = _control_point_geometry(Dataset(), _control_point_geometry(first))
+
+        assert inherited.gantry_angle == pytest.approx(37.0)
+        assert inherited.couch_angle == pytest.approx(12.0)
+        assert inherited.isocenter_mm == pytest.approx((10.0, -20.0, 300.0))
+
     def test_spot_control_point_data_validates_and_scales_energy(self):
         control_point = Dataset()
         control_point.ScanSpotPositionMap = [1.0, 2.0, -3.0, 4.0]
@@ -149,6 +169,82 @@ class TestPlanHelpers:
         control_point.IsocenterPosition = None
         matrix = _beam_world_matrix(control_point)
         assert matrix.translation == pytest.approx((0.0, 0.0, 0.0))
+
+
+def make_spot_control_point(
+    *,
+    gantry: float | None = None,
+    couch: float | None = None,
+    isocenter: list[float] | None = None,
+    energy: float = 150.0,
+    weights: list[float] | None = None,
+) -> Dataset:
+    control_point = Dataset()
+    if gantry is not None:
+        control_point.GantryAngle = gantry
+    if couch is not None:
+        control_point.PatientSupportAngle = couch
+    if isocenter is not None:
+        control_point.IsocenterPosition = isocenter
+    control_point.ScanSpotPositionMap = [1.0, 2.0]
+    control_point.ScanSpotMetersetWeights = [1.0] if weights is None else weights
+    control_point.NumberOfScanSpotPositions = 1
+    control_point.NominalBeamEnergy = energy
+    return control_point
+
+
+class TestSpotGrouping:
+    def test_static_energy_layers_share_one_object_geometry(self):
+        control_points = [
+            make_spot_control_point(
+                gantry=30.0,
+                couch=10.0,
+                isocenter=[1.0, 2.0, 3.0],
+                energy=150.0,
+            ),
+            Dataset(),
+            make_spot_control_point(energy=180.0),
+            Dataset(),
+        ]
+
+        groups, warnings = _collect_spot_groups(control_points)
+
+        assert warnings == []
+        assert len(groups) == 1
+        assert groups[0].control_point_indices == [0, 2]
+        assert groups[0].energies == pytest.approx([0.15, 0.18])
+        assert groups[0].geometry.gantry_angle == pytest.approx(30.0)
+        assert groups[0].geometry.couch_angle == pytest.approx(10.0)
+        assert groups[0].geometry.isocenter_mm == pytest.approx((1.0, 2.0, 3.0))
+
+    def test_stepped_arc_segments_keep_separate_transforms(self):
+        first_end = Dataset()
+        first_end.GantryAngle = 0.0
+        second_end = Dataset()
+        second_end.GantryAngle = 90.0
+        control_points = [
+            make_spot_control_point(gantry=0.0),
+            first_end,
+            make_spot_control_point(gantry=90.0),
+            second_end,
+        ]
+
+        groups, warnings = _collect_spot_groups(control_points)
+
+        assert warnings == []
+        assert [group.geometry.gantry_angle for group in groups] == pytest.approx([0.0, 90.0])
+        assert [group.control_point_indices for group in groups] == [[0], [2]]
+
+    def test_motion_during_irradiation_is_reported(self):
+        end = Dataset()
+        end.GantryAngle = 2.0
+
+        groups, warnings = _collect_spot_groups(
+            [make_spot_control_point(gantry=0.0), end]
+        )
+
+        assert len(groups) == 1
+        assert any("changes gantry, couch, or isocentre" in warning for warning in warnings)
 
 
 def beam_axes(gantry: float, couch: float = 0.0):

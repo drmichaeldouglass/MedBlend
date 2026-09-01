@@ -10,6 +10,7 @@ from MedBlend.dicom_util import (
     check_dicom_image_type,
     extract_dicom_data,
     float_or,
+    image_orientation_axes,
     is_dose_file,
     is_structure_file,
     load_dicom_series,
@@ -78,6 +79,10 @@ class TestRescale:
         scaled, _, _ = rescale_dicom_image(np.arange(6, dtype=np.float64).reshape(2, 3))
         assert scaled.dtype == np.float32
 
+    def test_non_finite_values_are_rejected(self):
+        with pytest.raises(ValueError, match="non-finite intensity"):
+            rescale_dicom_image(np.asarray([[0.0, float("nan")]]))
+
 
 class TestSorting:
     def test_sorts_along_slice_normal_not_instance_number(self):
@@ -97,6 +102,22 @@ class TestSorting:
         # sorted(zip(...)) would compare Datasets on ties without a key.
         slices = [make_slice(0.0, instance=i) for i in range(3)]
         assert len(sort_slices_spatially(slices)) == 3
+
+
+class TestImageOrientation:
+    def test_axes_are_normalised(self):
+        row, col, normal = image_orientation_axes([2, 0, 0, 0, 3, 0])
+        assert row == pytest.approx([1.0, 0.0, 0.0])
+        assert col == pytest.approx([0.0, 1.0, 0.0])
+        assert normal == pytest.approx([0.0, 0.0, 1.0])
+
+    @pytest.mark.parametrize(
+        "orientation",
+        ([0, 0, 0, 0, 1, 0], [1, 0, 0, 1, 0, 0], [1, 0, 0]),
+    )
+    def test_degenerate_or_incomplete_axes_are_rejected(self, orientation):
+        with pytest.raises(ValueError, match="ImageOrientationPatient"):
+            image_orientation_axes(orientation)
 
 
 class TestExtractDicomData:
@@ -137,6 +158,30 @@ class TestExtractDicomData:
         ds.PixelSpacing = None
         _, spacing, _, _, _, _ = extract_dicom_data([ds])
         assert tuple(spacing) == (1.0, 1.0)
+
+    def test_inconsistent_pixel_spacing_is_rejected(self):
+        slices = [make_slice(0.0, instance=0), make_slice(2.0, instance=1)]
+        slices[1].PixelSpacing = [1.0, 1.5]
+        with pytest.raises(ValueError, match="PixelSpacing inconsistent"):
+            extract_dicom_data(slices)
+
+    def test_inconsistent_orientation_is_rejected(self):
+        slices = [make_slice(0.0, instance=0), make_slice(2.0, instance=1)]
+        slices[1].ImageOrientationPatient = [0, 1, 0, -1, 0, 0]
+        with pytest.raises(ValueError, match="ImageOrientationPatient inconsistent"):
+            extract_dicom_data(slices)
+
+    def test_non_finite_rescale_is_rejected(self):
+        ds = make_slice(0.0)
+        ds.RescaleSlope = float("nan")
+        with pytest.raises(ValueError, match="non-finite RescaleSlope"):
+            extract_dicom_data([ds])
+
+    def test_non_finite_image_position_is_rejected(self):
+        ds = make_slice(0.0)
+        ds.ImagePositionPatient = [0.0, 0.0, float("nan")]
+        with pytest.raises(ValueError, match="invalid ImagePositionPatient"):
+            extract_dicom_data([ds])
 
 
 class TestLoadDicomSeries:

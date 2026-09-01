@@ -33,5 +33,8 @@ jobs:
       - name: Check that every module compiles
         run: python -m compileall -q *.py
 
+      - name: Run static checks
+        run: python -m ruff check *.py --select F,E9,B,PLE,PLW
+
       - name: Run tests
         run: python -m pytest tests -q

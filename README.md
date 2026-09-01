@@ -69,7 +69,7 @@ MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Loa
 
 - **Load DICOM Structures** imports a radiotherapy DICOM structure set. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
 
-- **Load Proton Plan** imports a DICOM RT Ion plan and displays proton spot positions as spheres with radius proportional to relative spot weight. 
+- **Load Proton Plan** imports proton scanning beams from a DICOM RT Ion plan and displays spot positions as spheres with radius proportional to relative spot weight. Non-proton ion beams are skipped. Static energy layers that share one geometry are combined into one Blender object, while stepped or arc segments with different gantry, couch, or isocentre geometry are kept in separate objects. If geometry changes during an irradiation segment, DICOM does not specify each spot's intermediate geometry, so MedBlend places that segment at its starting control point and reports a warning.
 
 ## How to add Materials to the CT and dose volumes
 
@@ -192,6 +192,7 @@ Upload the archive produced by `extension build` to the Blender Extensions platf
 - Contours are rasterised using an even-odd point-in-polygon test sampled at voxel centres, so a structure boundary is resolved to the nearest voxel. Small structures relative to the CT voxel size will show that quantisation.
 - Imported CT, dose, structure, and proton spot objects are now all placed in the DICOM patient coordinate system (millimetres mapped to metres), so they co-register automatically regardless of import order. Note that the CT volume is therefore no longer centred at the world origin.
 - Proton beam orientation (gantry and couch rotation) assumes a head-first supine (HFS) patient; other patient orientations have not been verified and a warning is shown when the plan reports a different patient position.
+- Gantry pitch and table-top pitch/roll are not yet applied to proton spot geometry.
 - If the bundled dependency is missing from the installed package, MedBlend will fail to load. Reinstall using the official extension archive and ensure the `wheels/` directory is included.
 
 Please report bugs through [GitHub Issues](https://github.com/drmichaeldouglass/MedBlend/issues).

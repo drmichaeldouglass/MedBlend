@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pydicom
 
-from .dicom_util import float_or, is_dose_file, positive_float_or
+from .dicom_util import image_orientation_axes, is_dose_file, positive_float_or
 from .node_groups import apply_dicom_shader
 from .ui_utils import show_message_box
 from .volume_utils import (
@@ -112,6 +112,9 @@ def load_dose(file_path: Path) -> bool:
 
     dose_matrix = np.asarray(pixel_data, dtype=np.float32)
     dose_matrix = dose_matrix * np.float32(dose_grid_scale)
+    if not np.all(np.isfinite(dose_matrix)):
+        show_message_box("Dose grid contains non-finite values.", "Error", "ERROR")
+        return False
     if dose_matrix.ndim == 2:
         dose_matrix = dose_matrix[np.newaxis, ...]
     elif dose_matrix.ndim != 3:
@@ -140,15 +143,9 @@ def load_dose(file_path: Path) -> bool:
     placement_error = None
     try:
         dose_origin = np.asarray(getattr(dataset, "ImagePositionPatient", [0.0, 0.0, 0.0]), dtype=float)
-        orientation = np.asarray(getattr(dataset, "ImageOrientationPatient", [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]), dtype=float)
-        row_dir = orientation[:3]
-        col_dir = orientation[3:]
-        normal_dir = np.cross(row_dir, col_dir)
-        normal_norm = float(np.linalg.norm(normal_dir))
-        if normal_norm > 0:
-            normal_dir = normal_dir / normal_norm
-        else:
-            normal_dir = np.asarray([0.0, 0.0, 1.0], dtype=float)
+        row_dir, col_dir, normal_dir = image_orientation_axes(
+            getattr(dataset, "ImageOrientationPatient", [1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+        )
 
         # Keep origin anchored to ImagePositionPatient (frame 0).
         # GridFrameOffsetVector is still used for slice direction/spacing.
