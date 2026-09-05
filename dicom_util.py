@@ -7,6 +7,7 @@ from typing import Iterable, List, Sequence, Tuple
 
 import numpy as np
 import pydicom
+from pydicom.pixels import apply_modality_lut
 
 
 def is_dose_file(ds: pydicom.Dataset) -> bool:
@@ -181,6 +182,29 @@ def sort_slices_spatially(images: Sequence[pydicom.Dataset]) -> List[pydicom.Dat
     ]
 
 
+def validate_slice_positions(slice_positions, normal_dir) -> None:
+    """Require slice origins to fit the supported orthogonal volume grid.
+
+    Projected spacing alone misses in-plane displacement in gantry-tilted
+    stacks. The current VDB/object placement uses the plane normal for its
+    slice axis, so accepting those origins would silently straighten anatomy.
+    """
+
+    positions = np.asarray(slice_positions, dtype=float)
+    if len(positions) < 2:
+        return
+    normal = np.asarray(normal_dir, dtype=float)
+    offsets = positions - positions[0]
+    projections = offsets @ normal
+    in_plane = offsets - projections[:, None] * normal
+    if not np.allclose(in_plane, 0.0, rtol=0.0, atol=1e-3):
+        raise ValueError(
+            "CT/MR slice origins have in-plane displacement (a sheared stack). "
+            "MedBlend cannot preserve this geometry with its current volume "
+            "transform. Resample the series onto an orthogonal grid before import."
+        )
+
+
 def _compute_slice_spacing(
     slice_positions: Sequence[Sequence[float]],
     image_orientation: Sequence[float],
@@ -222,6 +246,7 @@ def _compute_slice_spacing(
                     f"({positions_text} mm). MedBlend cannot represent non-uniform "
                     "slice positions in a linearly transformed VDB volume."
                 )
+            validate_slice_positions(positions, normal / norm)
             return slice_spacing
 
     return positive_float_or(fallback_thickness, 1.0)
@@ -304,7 +329,8 @@ def extract_dicom_data(
     slice_positions = []
     for index, dataset in enumerate(images):
         try:
-            pixels = np.asarray(dataset.pixel_array, dtype=np.float32)
+            stored_pixels = np.asarray(dataset.pixel_array)
+            pixels = np.asarray(stored_pixels, dtype=np.float32)
         except Exception as exc:
             raise ValueError(
                 f"Could not decode pixel data for slice {index + 1} of {len(images)}. "
@@ -354,14 +380,26 @@ def extract_dicom_data(
 
         # Apply the modality LUT per slice: RescaleSlope/Intercept may differ
         # between slices, in which case raw stored values are not comparable.
-        slope = float_or(getattr(dataset, "RescaleSlope", 1.0), 1.0)
-        intercept = float_or(getattr(dataset, "RescaleIntercept", 0.0), 0.0)
-        if not np.isfinite(slope) or not np.isfinite(intercept):
-            raise ValueError(
-                f"Slice {index + 1} has a non-finite RescaleSlope or RescaleIntercept."
-            )
-        if slope != 1.0 or intercept != 0.0:
-            pixels = pixels * np.float32(slope) + np.float32(intercept)
+        if getattr(dataset, "ModalityLUTSequence", None):
+            # LUT indexing requires the original integer pixels. A modality
+            # LUT takes precedence over rescale tags when both are present.
+            try:
+                pixels = np.asarray(
+                    apply_modality_lut(stored_pixels, dataset), dtype=np.float32
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"Slice {index + 1} has an invalid ModalityLUTSequence: {exc}"
+                ) from exc
+        else:
+            slope = float_or(getattr(dataset, "RescaleSlope", 1.0), 1.0)
+            intercept = float_or(getattr(dataset, "RescaleIntercept", 0.0), 0.0)
+            if not np.isfinite(slope) or not np.isfinite(intercept):
+                raise ValueError(
+                    f"Slice {index + 1} has a non-finite RescaleSlope or RescaleIntercept."
+                )
+            if slope != 1.0 or intercept != 0.0:
+                pixels = pixels * np.float32(slope) + np.float32(intercept)
         if not np.all(np.isfinite(pixels)):
             raise ValueError(f"Slice {index + 1} contains non-finite intensity values.")
         dicom_3d_array.append(pixels)

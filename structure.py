@@ -13,6 +13,7 @@ from .dicom_util import (
     image_orientation_axes,
     is_structure_file,
     positive_float_or,
+    validate_slice_positions,
 )
 from .node_groups import apply_structure_material
 from .ui_utils import show_message_box
@@ -235,6 +236,9 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
     # Basis for [row_index, col_index, slice_index] coordinates.
     row_axis = col_dir * row_spacing
     col_axis = row_dir * col_spacing
+    validate_slice_positions(
+        [ds.ImagePositionPatient for ds in sorted_slices], normal_dir
+    )
     slice_axis = normal_dir * slice_spacing
     basis = np.column_stack((row_axis, col_axis, slice_axis))
     inv_basis = np.linalg.inv(basis)

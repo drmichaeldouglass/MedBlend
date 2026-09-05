@@ -50,7 +50,7 @@ _WINDOWS_RESERVED_STEMS = frozenset(
 
 #: Leaves room for the "_<counter>" that _unique_path appends, well inside the
 #: 255-byte component limit that every filesystem MedBlend runs on enforces.
-_MAX_STEM_LENGTH = 120
+_MAX_STEM_BYTES = 120
 
 
 def _sanitize_filename(name: str) -> str:
@@ -69,9 +69,15 @@ def _sanitize_filename(name: str) -> str:
         stem, suffix = name, ""
 
     cleaned = "".join(char if (char.isalnum() or char in "._- ") else "_" for char in stem)
-    cleaned = cleaned.strip(". ")[:_MAX_STEM_LENGTH].strip(". ")
-    if not cleaned or cleaned.upper() in _WINDOWS_RESERVED_STEMS:
-        cleaned = f"{cleaned}_volume" if cleaned else "volume"
+    # UTF-8 byte limits matter for non-ASCII ROI names. Ignore only a partial
+    # trailing code point when truncating, preserving every complete character.
+    cleaned_bytes = cleaned.strip(". ").encode("utf-8")[:_MAX_STEM_BYTES]
+    cleaned = cleaned_bytes.decode("utf-8", errors="ignore").strip(". ")
+    if not cleaned:
+        cleaned = "volume"
+    elif cleaned.split(".", 1)[0].rstrip(" ").upper() in _WINDOWS_RESERVED_STEMS:
+        # Windows reserves the device component even with multiple suffixes.
+        cleaned = f"_volume_{cleaned}"
 
     return f"{cleaned}.{suffix}" if suffix else cleaned
 
