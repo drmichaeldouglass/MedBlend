@@ -195,8 +195,13 @@ def load_dose(file_path: Path) -> bool:
             "ERROR",
         )
 
-    dose_object["medblend_dose_max"] = float(np.max(dose_matrix)) if dose_matrix.size else 0.0
+    dose_max = float(np.max(dose_matrix)) if dose_matrix.size else 0.0
+    dose_object["medblend_dose_max"] = dose_max
     dose_object["medblend_dose_units"] = str(getattr(dataset, "DoseUnits", "") or "")
 
-    apply_dicom_shader("Dose Material", dose_object)
+    # The shipped Dose Material's colour ramp spans its Min Dose - Max Dose
+    # inputs, which the asset leaves at a fixed 0 - 1.67. Voxels hold absolute
+    # dose, so a clinical plan would otherwise saturate the ramp almost
+    # everywhere. Window it from zero to this grid's maximum instead.
+    apply_dicom_shader("Dose Material", dose_object, data_range=(0.0, dose_max))
     return True

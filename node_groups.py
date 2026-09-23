@@ -11,11 +11,11 @@ import bpy
 
 from .ui_utils import show_message_box
 
-#: Group inputs the shipped image material exposes for its window. Imported
-#: voxels keep the values DICOM stored, so the material has to be told the
-#: range they cover before its colour ramp - which is addressed by ``0 - 1`` -
-#: means anything.
-_WINDOW_INPUT_NAMES = ("Min HU", "Max HU")
+#: Group input pairs the shipped image and dose materials expose for their
+#: window. Imported voxels keep the values DICOM stored - Hounsfield units, or
+#: absolute dose in Gy - so the material has to be told the range they cover
+#: before its colour ramp, which is addressed by ``0 - 1``, means anything.
+_WINDOW_INPUT_PAIRS = (("Min HU", "Max HU"), ("Min Dose", "Max Dose"))
 
 #: Custom property recording the window a material copy was built for.
 _WINDOW_PROPERTY = "medblend_material_window"
@@ -93,7 +93,7 @@ def _valid_window(data_range: Optional[Sequence[float]]) -> Optional[tuple[float
 
 
 def _window_sockets(material: bpy.types.Material) -> list:
-    """Every writable ``Min HU``/``Max HU`` pair among the material's nodes.
+    """Every writable window input pair among the material's nodes.
 
     A pair driven by a link is skipped: the user is setting the window
     themselves, and a default behind a link does nothing visible anyway.
@@ -105,12 +105,13 @@ def _window_sockets(material: bpy.types.Material) -> list:
 
     pairs = []
     for node in getattr(node_tree, "nodes", ()):
-        sockets = [_socket(node, name) for name in _WINDOW_INPUT_NAMES]
-        if any(socket is None for socket in sockets):
-            continue
-        if any(getattr(socket, "is_linked", False) for socket in sockets):
-            continue
-        pairs.append(sockets)
+        for names in _WINDOW_INPUT_PAIRS:
+            sockets = [_socket(node, name) for name in names]
+            if any(socket is None for socket in sockets):
+                continue
+            if any(getattr(socket, "is_linked", False) for socket in sockets):
+                continue
+            pairs.append(sockets)
     return pairs
 
 
@@ -190,8 +191,8 @@ def apply_dicom_shader(
 
     ``data_range`` is the span of values the volume's voxels cover. When given,
     a copy of the material windowed onto that range is assigned instead of the
-    shared one, so a volume in Hounsfield units renders without the user having
-    to type its range into the shader.
+    shared one, so a volume in Hounsfield units or Gy renders without the user
+    having to type its range into the shader.
     """
 
     material = _load_material(shader_name)

@@ -89,7 +89,7 @@ Normalising is left to the shader, which is the only place that needs it. The Im
 
 Each window gets its own copy of the material (`Image Material - -1024 to 3071`), so retuning one volume never rewindows another that is already in the scene.
 
-Imported dose volumes are likewise unscaled: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`.
+Imported dose volumes are likewise unscaled: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`. The Dose Material's `Min Dose` and `Max Dose` inputs are set to `0` and that maximum on a per-range copy (`Dose Material - 0 to 70.2`), so the colour ramp spans the dose actually present. Raise `Min Dose` to hide low-dose regions.
 
 ![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
 
