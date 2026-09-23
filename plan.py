@@ -342,6 +342,8 @@ def load_proton_plan(file_path: Path) -> bool:
 
     imported_beam_count = 0
     imported_object_count = 0
+    spot_objects = []
+    max_spot_weight = 0.0
 
     for beam_index, beam in enumerate(ion_beams):
         radiation_type = _radiation_type(beam)
@@ -406,12 +408,22 @@ def load_proton_plan(file_path: Path) -> bool:
             obj["medblend_control_point_indices"] = group.control_point_indices
             if beam_name:
                 obj["medblend_beam_name"] = beam_name
-            apply_proton_spots_geo_nodes(node_tree_name="Proton_Spots", obj=obj)
+            spot_objects.append(obj)
+            max_spot_weight = max(max_spot_weight, *group.weights)
             imported_group_count += 1
             imported_object_count += 1
 
         if imported_group_count:
             imported_beam_count += 1
+
+    # Applied once the whole plan has been read, so every beam's spots share
+    # one weight window and size scale and stay comparable with each other.
+    for obj in spot_objects:
+        apply_proton_spots_geo_nodes(
+            node_tree_name="Proton_Spots",
+            obj=obj,
+            weight_range=(0.0, max_spot_weight),
+        )
 
     if imported_beam_count == 0:
         show_message_box(

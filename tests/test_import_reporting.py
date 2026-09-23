@@ -218,6 +218,7 @@ class TestDosePlacementReporting:
         assert low == 0.0
         assert high == pytest.approx(0.07)
         assert stub_volume_writer[0].get("medblend_dose_max") == pytest.approx(0.07)
+        assert calls[0]["zero_input_defaults"] == {"Intensity": dose_module.DEFAULT_DOSE_INTENSITY}
 
     def test_a_placement_failure_is_reported(
         self, tmp_path, captured, stub_volume_writer, monkeypatch

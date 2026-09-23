@@ -311,6 +311,29 @@ class TestDoseMaterialWindowing:
         assert first.data.materials[0] is second.data.materials[0]
         assert len(dose_materials) == 2
 
+    def test_a_zero_intensity_is_given_a_visible_default(self, dose_materials):
+        # The asset ships with Intensity 0, which emits no light at all.
+        obj = FakeObject()
+        node_groups.apply_dicom_shader(
+            "Dose Material", obj, data_range=DOSE_RANGE, zero_input_defaults={"Intensity": 5.0}
+        )
+
+        assigned = obj.data.materials[0].node_tree.nodes[-1]
+        assert assigned.inputs["Intensity"].default_value == 5.0
+        base = dose_materials.get("Dose Material").node_tree.nodes[-1]
+        assert base.inputs["Intensity"].default_value == 0.0
+
+    def test_an_intensity_the_user_set_is_kept(self, dose_materials):
+        base = dose_materials.get("Dose Material").node_tree.nodes[-1]
+        base.inputs["Intensity"].default_value = 2.5
+        obj = FakeObject()
+        node_groups.apply_dicom_shader(
+            "Dose Material", obj, data_range=DOSE_RANGE, zero_input_defaults={"Intensity": 5.0}
+        )
+
+        assigned = obj.data.materials[0].node_tree.nodes[-1]
+        assert assigned.inputs["Intensity"].default_value == 2.5
+
     def test_an_empty_dose_grid_keeps_the_shared_material(self, dose_materials):
         obj = FakeObject()
         assert node_groups.apply_dicom_shader("Dose Material", obj, data_range=(0.0, 0.0))

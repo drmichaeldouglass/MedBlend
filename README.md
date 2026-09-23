@@ -69,7 +69,7 @@ MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Loa
 
 - **Load DICOM Structures** imports a radiotherapy DICOM structure set. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
 
-- **Load Proton Plan** imports proton scanning beams from a DICOM RT Ion plan and displays spot positions as spheres with radius proportional to relative spot weight. Non-proton ion beams are skipped. Static energy layers that share one geometry are combined into one Blender object, while stepped or arc segments with different gantry, couch, or isocentre geometry are kept in separate objects. If geometry changes during an irradiation segment, DICOM does not specify each spot's intermediate geometry, so MedBlend places that segment at its starting control point and reports a warning.
+- **Load Proton Plan** imports proton scanning beams from a DICOM RT Ion plan and displays spot positions as spheres with radius proportional to relative spot weight. Sizes and colours are scaled to the heaviest spot in the plan, which is drawn 1.3 mm in radius, so they read the same whatever units the plan's meterset weights are in and stay comparable between beams. Each weight range gets its own copy of the node group and Spot Material (`Proton_Spots - 0 to 8`), and the modifier's `Spot Size` can still be changed afterwards. Non-proton ion beams are skipped. Static energy layers that share one geometry are combined into one Blender object, while stepped or arc segments with different gantry, couch, or isocentre geometry are kept in separate objects. If geometry changes during an irradiation segment, DICOM does not specify each spot's intermediate geometry, so MedBlend places that segment at its starting control point and reports a warning.
 
 ## How to add Materials to the CT and dose volumes
 
@@ -89,7 +89,7 @@ Normalising is left to the shader, which is the only place that needs it. The Im
 
 Each window gets its own copy of the material (`Image Material - -1024 to 3071`), so retuning one volume never rewindows another that is already in the scene.
 
-Imported dose volumes are likewise unscaled: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`. The Dose Material's `Min Dose` and `Max Dose` inputs are set to `0` and that maximum on a per-range copy (`Dose Material - 0 to 70.2`), so the colour ramp spans the dose actually present. Raise `Min Dose` to hide low-dose regions.
+Imported dose volumes are likewise unscaled: their voxels hold absolute dose, and the maximum value and dose units are recorded on the object as `medblend_dose_max` and `medblend_dose_units`. The Dose Material's `Min Dose` and `Max Dose` inputs are set to `0` and that maximum on a per-range copy (`Dose Material - 0 to 70.2`), so the colour ramp spans the dose actually present. Raise `Min Dose` to hide low-dose regions. The asset leaves `Intensity` at `0`, which emits no light, so the copy is given `5` unless you have already set your own value on the Dose Material.
 
 ![MapRange](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/4905bd84-addd-44c6-ac2a-44de5c9a42dc)
 
