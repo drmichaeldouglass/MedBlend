@@ -271,6 +271,75 @@ class TestImageMaterialWindowing:
         assert len(registry) == 1
 
 
+DOSE_RANGE = (0.0, 70.2)
+
+
+@pytest.fixture
+def dose_materials(monkeypatch):
+    """The shipped dose material, whose window inputs are Min/Max Dose."""
+
+    registry = FakeRegistry()
+    group = FakeNode(("Min Dose", "Max Dose", "Intensity"))
+    group.inputs["Max Dose"].default_value = 1.67
+    FakeMaterial("Dose Material", registry, node_tree=FakeNodeTree([FakeNode(()), group]))
+    monkeypatch.setattr(bpy.data, "materials", registry, raising=False)
+    return registry
+
+
+def dose_window_of(material):
+    group = material.node_tree.nodes[-1]
+    return group.inputs["Min Dose"].default_value, group.inputs["Max Dose"].default_value
+
+
+class TestDoseMaterialWindowing:
+    def test_the_dose_range_is_written_into_a_copy(self, dose_materials):
+        # The asset ships with a fixed 0 - 1.67 window, which saturated the
+        # colour ramp for any clinical dose in Gy.
+        obj = FakeObject()
+        assert node_groups.apply_dicom_shader("Dose Material", obj, data_range=DOSE_RANGE)
+
+        assigned = obj.data.materials[0]
+        assert assigned is not dose_materials.get("Dose Material")
+        assert dose_window_of(assigned) == DOSE_RANGE
+        assert dose_window_of(dose_materials.get("Dose Material")) == (0.0, 1.67)
+
+    def test_the_same_dose_range_reuses_one_copy(self, dose_materials):
+        first, second = FakeObject(), FakeObject()
+        node_groups.apply_dicom_shader("Dose Material", first, data_range=DOSE_RANGE)
+        node_groups.apply_dicom_shader("Dose Material", second, data_range=DOSE_RANGE)
+
+        assert first.data.materials[0] is second.data.materials[0]
+        assert len(dose_materials) == 2
+
+    def test_a_zero_intensity_is_given_a_visible_default(self, dose_materials):
+        # The asset ships with Intensity 0, which emits no light at all.
+        obj = FakeObject()
+        node_groups.apply_dicom_shader(
+            "Dose Material", obj, data_range=DOSE_RANGE, zero_input_defaults={"Intensity": 5.0}
+        )
+
+        assigned = obj.data.materials[0].node_tree.nodes[-1]
+        assert assigned.inputs["Intensity"].default_value == 5.0
+        base = dose_materials.get("Dose Material").node_tree.nodes[-1]
+        assert base.inputs["Intensity"].default_value == 0.0
+
+    def test_an_intensity_the_user_set_is_kept(self, dose_materials):
+        base = dose_materials.get("Dose Material").node_tree.nodes[-1]
+        base.inputs["Intensity"].default_value = 2.5
+        obj = FakeObject()
+        node_groups.apply_dicom_shader(
+            "Dose Material", obj, data_range=DOSE_RANGE, zero_input_defaults={"Intensity": 5.0}
+        )
+
+        assigned = obj.data.materials[0].node_tree.nodes[-1]
+        assert assigned.inputs["Intensity"].default_value == 2.5
+
+    def test_an_empty_dose_grid_keeps_the_shared_material(self, dose_materials):
+        obj = FakeObject()
+        assert node_groups.apply_dicom_shader("Dose Material", obj, data_range=(0.0, 0.0))
+        assert obj.data.materials[0] is dose_materials.get("Dose Material")
+
+
 class TestWriteVdbErrorRouting:
     def _spy(self, monkeypatch):
         shown = []

@@ -18,6 +18,12 @@ from .volume_utils import (
 )
 
 
+#: Emission strength (1/m) given to an imported dose when the Dose Material
+#: leaves its Intensity at zero. Bright enough to read a clinical dose cloud
+#: against a dark background without washing the high-dose core out to white.
+DEFAULT_DOSE_INTENSITY = 5.0
+
+
 def dose_grid_spacing(dataset: pydicom.Dataset) -> tuple[list[float], float]:
     """Return ``([slice, row, col] spacing in mm, signed slice step)``.
 
@@ -195,8 +201,20 @@ def load_dose(file_path: Path) -> bool:
             "ERROR",
         )
 
-    dose_object["medblend_dose_max"] = float(np.max(dose_matrix)) if dose_matrix.size else 0.0
+    dose_max = float(np.max(dose_matrix)) if dose_matrix.size else 0.0
+    dose_object["medblend_dose_max"] = dose_max
     dose_object["medblend_dose_units"] = str(getattr(dataset, "DoseUnits", "") or "")
 
-    apply_dicom_shader("Dose Material", dose_object)
+    # The shipped Dose Material's colour ramp spans its Min Dose - Max Dose
+    # inputs, which the asset leaves at a fixed 0 - 1.67. Voxels hold absolute
+    # dose, so a clinical plan would otherwise saturate the ramp almost
+    # everywhere. Window it from zero to this grid's maximum instead. The
+    # asset's Intensity is 0, which emits no light at all, so give the copy a
+    # visible default.
+    apply_dicom_shader(
+        "Dose Material",
+        dose_object,
+        data_range=(0.0, dose_max),
+        zero_input_defaults={"Intensity": DEFAULT_DOSE_INTENSITY},
+    )
     return True

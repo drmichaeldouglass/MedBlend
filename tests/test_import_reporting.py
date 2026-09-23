@@ -200,6 +200,26 @@ class TestDosePlacementReporting:
         assert captured == []
         assert stub_volume_writer[0].matrix_world is not None
 
+    def test_the_dose_material_is_windowed_onto_the_dose_range(
+        self, tmp_path, captured, stub_volume_writer, monkeypatch
+    ):
+        calls = []
+        monkeypatch.setattr(
+            dose_module,
+            "apply_dicom_shader",
+            lambda *args, **kwargs: calls.append(kwargs) or True,
+        )
+        path = make_dose_dataset(tmp_path, [1, 0, 0, 0, 1, 0])
+        assert dose_module.load_dose(path) is True
+
+        # Stored values 0 - 7 at DoseGridScaling 0.01.
+        assert len(calls) == 1
+        low, high = calls[0]["data_range"]
+        assert low == 0.0
+        assert high == pytest.approx(0.07)
+        assert stub_volume_writer[0].get("medblend_dose_max") == pytest.approx(0.07)
+        assert calls[0]["zero_input_defaults"] == {"Intensity": dose_module.DEFAULT_DOSE_INTENSITY}
+
     def test_a_placement_failure_is_reported(
         self, tmp_path, captured, stub_volume_writer, monkeypatch
     ):
