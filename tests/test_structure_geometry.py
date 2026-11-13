@@ -13,6 +13,7 @@ from MedBlend.structure import (
     _build_geometry_from_contours,
     _get_structure_frame_uid,
     _load_reference_image_slices,
+    _name_after_roi,
     _polygon_mask,
     _roi_display_color,
     crop_mask_to_bounds,
@@ -464,3 +465,32 @@ class TestStructureMetadata:
         partial = Dataset()
         partial.ROIDisplayColor = [255]
         assert _roi_display_color(partial) is None
+
+
+class TestStructureObjectNames:
+    class _Named:
+        def __init__(self, name, data=None):
+            self.name = name
+            self.data = data
+
+    def test_object_and_volume_take_the_unsanitised_roi_name(self):
+        # The VDB file is "PTV 70_35 _CON_.vdb"; the outliner should not be.
+        volume = self._Named("PTV 70_35 _CON_")
+        obj = self._Named("PTV 70_35 _CON_", volume)
+        _name_after_roi(obj, "PTV 70/35 (CON)")
+        assert obj.name == "PTV 70/35 (CON)"
+        assert volume.name == "PTV 70/35 (CON)"
+
+    def test_a_failed_rename_does_not_raise(self):
+        class Locked:
+            data = None
+
+            @property
+            def name(self):
+                return "_volume_CON"
+
+            @name.setter
+            def name(self, _value):
+                raise RuntimeError("read-only")
+
+        _name_after_roi(Locked(), "CON")

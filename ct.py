@@ -86,7 +86,10 @@ def load_ct_series(
     slice_spacing = slice_spacing or 1.0
     spacing_values = (float(slice_spacing), float(spacing[0]), float(spacing[1]))
 
-    result = write_vdb_volume(ct_volume, spacing_values, "CT.vdb")
+    # Named after the modality so an MR series is not labelled "CT" in the
+    # outliner. check_dicom_image_type has already limited it to CT or MR.
+    modality = str(getattr(selected_file, "Modality", "") or "")
+    result = write_vdb_volume(ct_volume, spacing_values, f"{modality or 'Image'}.vdb")
     if not result:
         return False
     _output_path, ct_object = result
@@ -97,7 +100,7 @@ def load_ct_series(
     ct_object[CT_IMPORT_INDEX_KEY] = next_ct_import_index()
     # Volume presets read this to decide whether the voxels are in a
     # calibrated unit (Hounsfield) or a per-scan intensity range.
-    ct_object["medblend_modality"] = str(getattr(selected_file, "Modality", "") or "")
+    ct_object["medblend_modality"] = modality
     # The range the voxels actually occupy, in the units they are stored in.
     # Volume presets window their transfer functions onto it, and it saves the
     # user reading a histogram to find a threshold. Recorded before the

@@ -110,6 +110,23 @@ class TestCtPlacementReporting:
         assert stub_volume_writer[0].get(ct_module.CT_IMPORT_INDEX_KEY) == 1
 
 
+class TestImageVolumeNaming:
+    def test_a_ct_series_is_named_ct(self, tmp_path, captured, stub_volume_writer):
+        ct_module.load_ct_series(write_ct_series(tmp_path, [1, 0, 0, 0, 1, 0]))
+        assert stub_volume_writer[0].name == "CT"
+
+    def test_an_mr_series_is_not_labelled_ct(self, tmp_path, captured, stub_volume_writer):
+        for index in range(3):
+            slice_ds = make_slice(index * 2.0, instance=index)
+            slice_ds.Modality = "MR"
+            write_slice(tmp_path, slice_ds, f"slice{index}.dcm")
+
+        assert ct_module.load_ct_series(tmp_path / "slice0.dcm") is True
+        obj = stub_volume_writer[0]
+        assert obj.name == "MR"
+        assert obj.get("medblend_modality") == "MR"
+
+
 class TestCtIntensities:
     """The grid holds what DICOM stored, not a per-scan 0 - 1 rescaling."""
 

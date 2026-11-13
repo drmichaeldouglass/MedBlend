@@ -13,6 +13,7 @@ from MedBlend.volume_utils import (
     _sanitize_filename,
     _unique_path,
     align_object_to_ct_frame,
+    ct_patient_to_world,
     find_ct_anchor,
     next_ct_import_index,
     set_object_patient_transform,
@@ -135,6 +136,29 @@ class TestAlignObjectToCtFrame:
         ct = make_ct_object()
         dose_origin, _, dose_basis = self._dose_setup()
         assert not align_object_to_ct_frame(FakeObject(), ct, dose_origin, dose_basis, [0.0, 1.0, 1.0])
+
+
+class TestCtPatientToWorld:
+    def test_is_identity_for_a_ct_left_where_it_was_imported(self):
+        ct = make_ct_object()
+        matrix = ct_patient_to_world(ct)
+        for point in ([0.0, 0.0, 0.0], [0.01, -0.2, 0.3]):
+            assert np.allclose(apply(matrix, point), point, atol=1e-12)
+
+    def test_follows_a_moved_and_rotated_ct(self):
+        ct = make_ct_object()
+        move = Matrix.Translation((1.0, 2.0, 0.0)) @ Matrix.Rotation(0.5, 4, "Z")
+        ct.matrix_world = move @ ct.matrix_world
+        point = [0.01, 0.02, 0.29]
+        assert np.allclose(apply(ct_patient_to_world(ct), point), apply(move, point), atol=1e-12)
+
+    def test_returns_none_without_ct_geometry(self):
+        assert ct_patient_to_world(FakeObject(medblend_is_ct=True)) is None
+
+    def test_returns_none_for_non_positive_spacing(self):
+        ct = make_ct_object()
+        ct["medblend_ct_spacing_mm"] = [0.0, 1.0, 1.0]
+        assert ct_patient_to_world(ct) is None
 
 
 class TestFindCtAnchor:

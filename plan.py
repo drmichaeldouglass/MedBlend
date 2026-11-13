@@ -14,6 +14,7 @@ from mathutils import Matrix
 from .blender_utils import add_data_fields, create_object
 from .node_groups import apply_proton_spots_geo_nodes
 from .ui_utils import show_message_box
+from .volume_utils import ct_patient_to_world, find_ct_anchor
 
 
 RT_ION_PLAN_STORAGE_UID = "1.2.840.10008.5.1.4.1.1.481.8"
@@ -340,6 +341,13 @@ def load_proton_plan(file_path: Path) -> bool:
             f"Patient position is {patient_position}; beam orientation assumes HFS."
         )
 
+    # Beams are placed in DICOM patient coordinates. Dose and structures go
+    # through the matching CT so they follow it after the user has moved it;
+    # beams have to do the same or they are left behind at the old position.
+    frame_uid = str(getattr(dataset, "FrameOfReferenceUID", "") or "")
+    ct_anchor = find_ct_anchor(frame_uid)
+    patient_to_world = ct_patient_to_world(ct_anchor) if ct_anchor is not None else None
+
     imported_beam_count = 0
     imported_object_count = 0
     spot_objects = []
@@ -403,7 +411,10 @@ def load_proton_plan(file_path: Path) -> bool:
                 continue
 
             obj = create_object(mesh, mesh.name)
-            obj.matrix_world = _beam_world_matrix_from_geometry(group.geometry)
+            beam_matrix = _beam_world_matrix_from_geometry(group.geometry)
+            obj.matrix_world = (
+                beam_matrix if patient_to_world is None else patient_to_world @ beam_matrix
+            )
             obj["medblend_beam_number"] = beam_number
             obj["medblend_control_point_indices"] = group.control_point_indices
             if beam_name:
