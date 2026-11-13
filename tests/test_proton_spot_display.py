@@ -8,6 +8,7 @@ import pytest
 from pydicom.dataset import Dataset
 
 import bpy
+from mathutils import Matrix
 from MedBlend import node_groups, plan
 
 from test_materials_and_reporting import FakeMaterial, FakeNode, FakeNodeTree, FakeRegistry
@@ -235,6 +236,7 @@ class TestPlanSpotWindow:
             plan.bpy, "data", SimpleNamespace(meshes=SimpleNamespace(new=FakeMesh)), raising=False
         )
         monkeypatch.setattr(plan, "create_object", lambda _mesh, _name: FakePlanObject())
+        monkeypatch.setattr(plan, "find_ct_anchor", lambda _uid: None)
         monkeypatch.setattr(plan, "show_message_box", lambda *a, **k: None)
         calls = []
         monkeypatch.setattr(
@@ -245,3 +247,43 @@ class TestPlanSpotWindow:
         # Windowing each beam on its own weights would make a lightly
         # weighted beam look as heavy as the main one.
         assert [call["weight_range"] for call in calls] == [(0.0, 8.0), (0.0, 8.0)]
+
+
+class TestPlanFollowsCt:
+    def _load(self, monkeypatch, tmp_path, patient_to_world):
+        ds = Dataset()
+        ds.Modality = "RTPLAN"
+        ds.SOPClassUID = plan.RT_ION_PLAN_STORAGE_UID
+        ds.FrameOfReferenceUID = "1.2.3"
+        ds.IonBeamSequence = [make_beam(1, [1.0, 2.0])]
+        monkeypatch.setattr(plan.pydicom, "dcmread", lambda _path: ds)
+        monkeypatch.setattr(
+            plan.bpy, "data", SimpleNamespace(meshes=SimpleNamespace(new=FakeMesh)), raising=False
+        )
+        created = []
+
+        def create(_mesh, _name):
+            created.append(FakePlanObject())
+            return created[-1]
+
+        monkeypatch.setattr(plan, "create_object", create)
+        anchors = []
+        monkeypatch.setattr(plan, "find_ct_anchor", lambda uid: anchors.append(uid) or "ct")
+        monkeypatch.setattr(plan, "ct_patient_to_world", lambda _ct: patient_to_world)
+        monkeypatch.setattr(plan, "show_message_box", lambda *a, **k: None)
+        monkeypatch.setattr(plan, "apply_proton_spots_geo_nodes", lambda **kwargs: None)
+
+        assert plan.load_proton_plan(tmp_path / "plan.dcm") is True
+        assert anchors == ["1.2.3"]
+        return created
+
+    def test_beams_are_placed_through_a_moved_ct(self, monkeypatch, tmp_path):
+        # A dose or structure imported after the user moves the CT follows
+        # it; spots used to stay behind in raw patient coordinates.
+        moved = Matrix.Translation((1.0, 0.0, 0.0))
+        (obj,) = self._load(monkeypatch, tmp_path, moved)
+        assert obj.matrix_world.translation == pytest.approx((1.0, 0.0, 0.0))
+
+    def test_without_a_ct_beams_stay_in_patient_coordinates(self, monkeypatch, tmp_path):
+        (obj,) = self._load(monkeypatch, tmp_path, None)
+        assert obj.matrix_world.translation == pytest.approx((0.0, 0.0, 0.0))

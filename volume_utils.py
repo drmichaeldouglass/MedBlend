@@ -207,6 +207,54 @@ def set_object_patient_transform(
     obj.matrix_world = rot
 
 
+def _affine_matrix(linear, translation) -> Matrix:
+    """Build a 4x4 ``Matrix`` from a 3x3 linear part and a translation."""
+
+    matrix = Matrix(
+        (
+            (float(linear[0, 0]), float(linear[0, 1]), float(linear[0, 2]), 0.0),
+            (float(linear[1, 0]), float(linear[1, 1]), float(linear[1, 2]), 0.0),
+            (float(linear[2, 0]), float(linear[2, 1]), float(linear[2, 2]), 0.0),
+            (0.0, 0.0, 0.0, 1.0),
+        )
+    )
+    matrix.translation = tuple(float(value) for value in translation)
+    return matrix
+
+
+def ct_patient_to_world(ct_obj: bpy.types.Object) -> Optional[Matrix]:
+    """Return the matrix taking DICOM patient coordinates, in metres, to world space.
+
+    The mapping goes through ``ct_obj``'s current world matrix, so anything
+    placed with it stays registered to the CT even after the user has moved,
+    rotated or scaled the CT object. Returns ``None`` when the CT carries no
+    recorded geometry - its placement failed, or it predates these properties.
+    """
+
+    ct_basis_flat = ct_obj.get("medblend_ct_basis_mm")
+    if not ct_basis_flat or len(ct_basis_flat) != 9:
+        return None
+
+    try:
+        ct_basis = np.asarray(ct_basis_flat, dtype=float).reshape((3, 3))
+        ct_origin = np.asarray(ct_obj.get("medblend_ct_origin_mm", [0.0, 0.0, 0.0]), dtype=float)
+        ct_spacing = np.asarray(ct_obj.get("medblend_ct_spacing_mm", [1.0, 1.0, 1.0]), dtype=float)
+        if ct_origin.shape != (3,) or ct_spacing.shape != (3,) or np.any(ct_spacing <= 0):
+            return None
+
+        # Patient millimetres -> CT index -> CT object-local metres. Patient
+        # input is in metres here, so the millimetre scale cancels out of the
+        # linear part and only remains on the origin.
+        mm_to_local = np.diag(ct_spacing / 1000.0) @ np.linalg.inv(ct_basis)
+        linear = mm_to_local * 1000.0
+        translation = -(mm_to_local @ ct_origin)
+        if not (np.all(np.isfinite(linear)) and np.all(np.isfinite(translation))):
+            return None
+        return ct_obj.matrix_world @ _affine_matrix(linear, translation)
+    except Exception:
+        return None
+
+
 def align_object_to_ct_frame(
     obj: bpy.types.Object,
     ct_obj: bpy.types.Object,
@@ -214,38 +262,23 @@ def align_object_to_ct_frame(
     basis_mm: Sequence[Sequence[float]],
     spacing_mm: Sequence[float],
 ) -> bool:
-    ct_basis_flat = ct_obj.get("medblend_ct_basis_mm")
-    if not ct_basis_flat or len(ct_basis_flat) != 9:
+    patient_to_world = ct_patient_to_world(ct_obj)
+    if patient_to_world is None:
         return False
 
     try:
-        ct_basis = np.asarray(ct_basis_flat, dtype=float).reshape((3, 3))
-        ct_origin = np.asarray(ct_obj.get("medblend_ct_origin_mm", [0.0, 0.0, 0.0]), dtype=float)
-        ct_spacing = np.asarray(ct_obj.get("medblend_ct_spacing_mm", [1.0, 1.0, 1.0]), dtype=float)
         source_origin = np.asarray(origin_mm, dtype=float)
         source_basis = np.asarray(basis_mm, dtype=float).reshape((3, 3))
         source_spacing = np.asarray(spacing_mm, dtype=float)
-        if np.any(source_spacing <= 0) or np.any(ct_spacing <= 0):
+        if np.any(source_spacing <= 0):
             return False
 
-        patient_to_world = np.diag(ct_spacing / 1000.0) @ np.linalg.inv(ct_basis)
-        source_scale = np.diag(source_spacing / 1000.0)
-        linear = patient_to_world @ source_basis @ np.linalg.inv(source_scale)
-        translation = patient_to_world @ (source_origin - ct_origin)
-
-        matrix = Matrix(
-            (
-                (float(linear[0, 0]), float(linear[0, 1]), float(linear[0, 2]), 0.0),
-                (float(linear[1, 0]), float(linear[1, 1]), float(linear[1, 2]), 0.0),
-                (float(linear[2, 0]), float(linear[2, 1]), float(linear[2, 2]), 0.0),
-                (0.0, 0.0, 0.0, 1.0),
-            )
-        )
-        matrix.translation = tuple(float(value) for value in translation)
-        # ``matrix`` maps the new object into the CT object's local frame, so
-        # compose with the CT's current world matrix. This keeps alignment
-        # correct even when the user has moved/rotated/scaled the CT object.
-        obj.matrix_world = ct_obj.matrix_world @ matrix
+        # VDB-local metres -> source index -> patient metres. The grid bakes
+        # spacing into its local coordinates, so dividing it back out leaves
+        # the basis directions with the millimetre scale cancelled.
+        linear = source_basis @ np.diag(1.0 / source_spacing)
+        local_to_patient = _affine_matrix(linear, source_origin / 1000.0)
+        obj.matrix_world = patient_to_world @ local_to_patient
     except Exception:
         return False
 

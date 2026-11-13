@@ -592,6 +592,26 @@ def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
             yield roi_name, None, color, skipped
 
 
+def _name_after_roi(obj, roi_name: str) -> None:
+    """Give an imported structure object its ROI name.
+
+    The VDB file name has to be sanitised for the filesystem, which turned
+    "PTV 70/35" into "PTV 70_35" and an ROI called "CON" into "_volume_CON"
+    in the outliner. Blender names accept any character, so the object and
+    its volume datablock carry the ROI name exactly; Blender itself adds a
+    ".001" suffix when the name is already taken.
+    """
+
+    try:
+        obj.name = roi_name
+        data = getattr(obj, "data", None)
+        if data is not None:
+            data.name = roi_name
+    except (AttributeError, TypeError, ValueError, RuntimeError):
+        # A cosmetic rename must never fail an import that already succeeded.
+        pass
+
+
 def load_structures(file_path: Path) -> bool:
     structure_file_path = Path(file_path)
     directory_path = structure_file_path.parent
@@ -655,6 +675,7 @@ def load_structures(file_path: Path) -> bool:
                 failed_names.append(roi_name)
                 continue
             _output_path, imported_obj = result
+            _name_after_roi(imported_obj, roi_name)
 
             if color:
                 imported_obj.color = color
