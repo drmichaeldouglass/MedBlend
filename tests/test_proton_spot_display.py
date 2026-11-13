@@ -149,6 +149,41 @@ class TestSpotDisplay:
         )
         assert modifier["Socket_3"] * max_weight == pytest.approx(node_groups.MAX_SPOT_RADIUS)
 
+    def test_the_spot_size_is_set_through_the_blender_5_3_modifier_interface(
+        self, spot_assets
+    ):
+        # Blender 5.3 dropped ID-property access on the modifier: inputs live
+        # on modifier.properties.inputs.<identifier>.value and item assignment
+        # raises, which used to leave Spot Size at the asset default in silence.
+        class Blender53Modifier:
+            node_group = None
+
+            def __init__(self):
+                socket = SimpleNamespace(value=1e-4)
+                self.properties = SimpleNamespace(inputs=SimpleNamespace(Socket_3=socket))
+
+            def __setitem__(self, key, value):
+                raise TypeError("bpy_struct[key] = val: id properties not supported for this type")
+
+        class Blender53Modifiers(FakeModifiers):
+            def new(self, name, _type):
+                self._modifiers[name] = Blender53Modifier()
+                return self._modifiers[name]
+
+        obj = FakeSpotObject()
+        obj.modifiers = Blender53Modifiers()
+        modifier = node_groups.apply_proton_spots_geo_nodes(obj=obj, weight_range=(0.0, 0.4))
+
+        assert modifier.properties.inputs.Socket_3.value * 0.4 == pytest.approx(
+            node_groups.MAX_SPOT_RADIUS
+        )
+
+    def test_an_unknown_modifier_input_is_reported_as_not_set(self, spot_assets):
+        modifier = node_groups.apply_proton_spots_geo_nodes(
+            obj=FakeSpotObject(), weight_range=(0.0, 0.4)
+        )
+        assert node_groups._set_modifier_input(modifier, "No Such Input", 1.0) is False
+
     def test_the_same_weights_reuse_one_copy(self, spot_assets):
         first = node_groups.apply_proton_spots_geo_nodes(
             obj=FakeSpotObject(), weight_range=(0.0, 0.4)

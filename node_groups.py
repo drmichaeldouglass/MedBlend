@@ -380,12 +380,29 @@ def _windowed_spot_node_group(node_group, window: tuple[float, float]):
 
 
 def _set_modifier_input(modifier, name: str, value: float) -> bool:
-    """Set a geometry nodes modifier input by its interface name."""
+    """Set a geometry nodes modifier input by its interface name.
+
+    Blender 5.3 moved modifier inputs out of the modifier's ID properties and
+    onto ``modifier.properties.inputs.<identifier>.value``; assigning
+    ``modifier[identifier]`` raises there. Earlier 5.x releases only have the
+    ID property form, so the new location is tried first and the old one kept
+    as the fallback.
+    """
 
     interface = getattr(getattr(modifier, "node_group", None), "interface", None)
     for item in getattr(interface, "items_tree", ()):
         if getattr(item, "in_out", None) != "INPUT" or getattr(item, "name", None) != name:
             continue
+
+        inputs = getattr(getattr(modifier, "properties", None), "inputs", None)
+        socket = getattr(inputs, item.identifier, None) if inputs is not None else None
+        if socket is not None and hasattr(socket, "value"):
+            try:
+                socket.value = float(value)
+                return True
+            except Exception:
+                pass
+
         try:
             modifier[item.identifier] = float(value)
         except Exception:

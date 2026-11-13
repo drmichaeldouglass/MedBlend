@@ -88,7 +88,11 @@ def build_preset_node_tree(
     low, high = float(window[0]), float(window[1])
     data_low, data_high = float(data_range[0]), float(data_range[1])
 
-    material.use_nodes = True
+    # Materials always carry a node tree from Blender 5.0, where ``use_nodes``
+    # is deprecated and due for removal in 6.0, so only switch nodes on when
+    # there is no tree to build into.
+    if getattr(material, "node_tree", None) is None:
+        material.use_nodes = True
     tree = material.node_tree
     nodes = tree.nodes
     links = tree.links
