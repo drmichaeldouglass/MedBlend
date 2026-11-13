@@ -24,6 +24,7 @@ from .volume_materials import (
     DEFAULT_EMISSION_STRENGTH,
     apply_volume_preset,
 )
+from .volume_utils import relocate_session_volumes
 
 
 def _get_prefs(context) -> Optional[bpy.types.AddonPreferences]:
@@ -37,9 +38,10 @@ class MEDBLEND_Preferences(bpy.types.AddonPreferences):
     vdb_temp_dir: bpy.props.StringProperty(
         name="VDB Temp Directory",
         description=(
-            "Directory to store generated VDB files. If empty, Blender's session "
-            "temporary directory is used, which is deleted when Blender exits - "
-            "volumes in saved .blend files will then lose their data on reload"
+            "Directory to store generated VDB files. If empty, they are kept in a "
+            "'<file name>_vdb' folder beside the .blend file - written there "
+            "directly for a saved scene, or copied there from Blender's temporary "
+            "directory the first time an unsaved scene is saved"
         ),
         subtype="DIR_PATH",
         default="",
@@ -354,6 +356,17 @@ def _draw_file_import_menu(self, _context):
         self.layout.operator(operator_id, text=label)
 
 
+@bpy.app.handlers.persistent
+def _relocate_volumes_on_save(filepath, *_args):
+    """Keep generated VDB files alive past the session they were made in."""
+
+    try:
+        relocate_session_volumes(filepath)
+    except Exception as exc:
+        # A handler that raises would be reported against the save itself.
+        print(f"MedBlend: could not relocate volume files: {exc}")
+
+
 classes: tuple[type, ...] = (
     MEDBLEND_Preferences,
     MEDBLEND_VolumePresetSettings,
@@ -378,8 +391,14 @@ def register():
 
     bpy.types.TOPBAR_MT_file_import.append(_draw_file_import_menu)
 
+    if _relocate_volumes_on_save not in bpy.app.handlers.save_pre:
+        bpy.app.handlers.save_pre.append(_relocate_volumes_on_save)
+
 
 def unregister():
+    if _relocate_volumes_on_save in bpy.app.handlers.save_pre:
+        bpy.app.handlers.save_pre.remove(_relocate_volumes_on_save)
+
     try:
         bpy.types.TOPBAR_MT_file_import.remove(_draw_file_import_menu)
     except ValueError:

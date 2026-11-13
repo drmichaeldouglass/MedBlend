@@ -591,7 +591,6 @@ class TestBuildPresetNodeTree:
             if node.bl_idname == "ShaderNodeOutputMaterial"
         )
 
-        assert material.use_nodes is True
         assert linked_from(material, output.inputs["Volume"]) == [principled.outputs["Volume"]]
         assert linked_from(material, principled.inputs["Color"]) == [
             node_named(material, "Color Transfer").outputs["Color"]
@@ -607,6 +606,31 @@ class TestBuildPresetNodeTree:
     @pytest.mark.parametrize("preset", presets.VOLUME_PRESETS, ids=lambda p: p.name)
     def test_every_preset_builds(self, materials, preset):
         material = volume_materials.get_preset_material(preset, preset.window)
+
+        assert len(material.node_tree.links) == 10
+
+    def test_use_nodes_is_left_alone_when_the_material_has_a_node_tree(self, material):
+        # Material.use_nodes is deprecated from Blender 5.0 and goes in 6.0;
+        # a material that already has a tree must not touch it.
+        assert material.use_nodes is False
+
+    def test_nodes_are_switched_on_for_a_material_without_a_tree(self):
+        class TreelessMaterial(FakeMaterial):
+            def __init__(self, name):
+                super().__init__(name)
+                tree, self.node_tree = self.node_tree, None
+                self._tree = tree
+
+            def __setattr__(self, key, value):
+                super().__setattr__(key, value)
+                if key == "use_nodes" and value:
+                    super().__setattr__("node_tree", self._tree)
+
+        material = TreelessMaterial("treeless")
+        preset = presets.get_preset("CT-Bone")
+        volume_materials.build_preset_node_tree(
+            material, preset, preset.window, preset.window, 200.0, 1.0
+        )
 
         assert material.use_nodes is True
         assert len(material.node_tree.links) == 10

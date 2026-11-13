@@ -109,11 +109,22 @@ class data:
     node_groups = _Collection()
     meshes = _Collection()
     volumes = _Collection()
+    filepath = ""
+
+
+class _Handlers:
+    def __init__(self):
+        self.save_pre = []
+
+    @staticmethod
+    def persistent(func):
+        return func
 
 
 class app:
     tempdir = "/tmp"
     cachedir = "/tmp"
+    handlers = _Handlers()
 
 
 context = _Namespace()
