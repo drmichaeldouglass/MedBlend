@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
@@ -104,8 +105,100 @@ def _unique_path(base_dir: Path, target_name: str) -> Path:
         counter += 1
 
 
+#: Custom property marking a Volume datablock whose VDB file MedBlend wrote,
+#: so saving a scene only relocates files this add-on is responsible for.
+GENERATED_VDB_KEY = "medblend_generated_vdb"
+
+
+def blend_vdb_dir(blend_path) -> Optional[Path]:
+    """The folder kept beside a saved .blend for its generated VDB files.
+
+    ``scan.blend`` gets ``scan_vdb/`` next to it, so the pair can be moved or
+    archived together and Blender's relative paths keep resolving.
+    """
+
+    if not blend_path:
+        return None
+    blend_path = Path(str(blend_path))
+    return blend_path.parent / f"{blend_path.stem}_vdb"
+
+
+def _is_inside(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def relocate_session_volumes(blend_path) -> list[Path]:
+    """Copy generated VDB files out of the session temp directory on save.
+
+    Blender volume objects read their voxels from the VDB file on disk, and
+    Blender deletes its session temporary directory on exit. A scene imported
+    before its first save therefore pointed at files that were gone by the
+    next time it was opened, leaving every volume empty. Called from a
+    ``save_pre`` handler with the path being saved to, this copies each such
+    file into :func:`blend_vdb_dir` and repoints the datablock, so the paths
+    written into the .blend outlive the session.
+
+    Returns the new file paths. A file that cannot be copied is left where it
+    is and reported, rather than failing the save.
+    """
+
+    destination_dir = blend_vdb_dir(blend_path)
+    session_dir = getattr(bpy.app, "tempdir", "")
+    if destination_dir is None or not session_dir:
+        return []
+
+    try:
+        session_dir = Path(session_dir).resolve()
+        # Saves into the session directory itself are Blender's own scratch
+        # files; relocating next to those would not outlive the session.
+        if _is_inside(Path(str(blend_path)).resolve(), session_dir):
+            return []
+    except OSError:
+        return []
+
+    relocated: dict[Path, Path] = {}
+    errors: list[str] = []
+    for volume in list(getattr(bpy.data, "volumes", ())):
+        try:
+            if not volume.get(GENERATED_VDB_KEY) or getattr(volume, "library", None):
+                continue
+            source = Path(bpy.path.abspath(volume.filepath)).resolve()
+            if not _is_inside(source, session_dir) or not source.is_file():
+                continue
+
+            destination = relocated.get(source)
+            if destination is None:
+                destination_dir.mkdir(parents=True, exist_ok=True)
+                destination = _unique_path(destination_dir, source.name)
+                shutil.copy2(source, destination)
+                relocated[source] = destination
+            volume.filepath = str(destination)
+        except Exception as exc:
+            errors.append(f"{getattr(volume, 'name', '?')}: {exc}")
+
+    if errors:
+        show_message_box(
+            "Some volume files could not be copied next to the .blend file and "
+            "will be missing when it is reopened: " + "; ".join(errors[:3]),
+            "Warning",
+            "ERROR",
+        )
+    return list(relocated.values())
+
+
 def resolve_temp_path(target_name: str) -> Path:
-    base_dir = _get_vdb_temp_dir() or _default_temp_base_dir()
+    # A scene that is already saved gets its volumes written straight into the
+    # folder beside it; an unsaved one uses the session directory and is moved
+    # there by relocate_session_volumes on its first save.
+    base_dir = (
+        _get_vdb_temp_dir()
+        or blend_vdb_dir(getattr(bpy.data, "filepath", ""))
+        or _default_temp_base_dir()
+    )
 
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -419,6 +512,18 @@ def write_vdb_volume(
             imported_obj = _import_volume_data_api(output_path)
         except Exception:
             imported_obj = _import_volume_operator_fallback(output_path)
+
+        try:
+            imported_obj.data[GENERATED_VDB_KEY] = True
+            # A file written beside a saved .blend is referenced relative to
+            # it, so the two can be moved together. Blender only rewrites
+            # absolute paths on Save As, not on a plain save.
+            blend_dir = blend_vdb_dir(getattr(bpy.data, "filepath", ""))
+            if blend_dir is not None and _is_inside(output_path.resolve(), blend_dir.resolve()):
+                imported_obj.data.filepath = bpy.path.relpath(str(output_path))
+        except Exception:
+            # Only costs portability of the saved scene, not the import.
+            pass
 
         return output_path, imported_obj
     except Exception as exc:

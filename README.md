@@ -21,7 +21,7 @@ MedBlend is not a medical device and must not be used for diagnosis, treatment p
 
 ## Data handling and privacy
 
-MedBlend processes DICOM files locally and makes no network requests. It reads files selected by the user and writes generated VDB volume files to Blender's temporary directory or a directory selected in the extension preferences.
+MedBlend processes DICOM files locally and makes no network requests. It reads files selected by the user and writes generated VDB volume files to a folder beside the saved .blend file, to Blender's temporary directory while the scene is unsaved, or to a directory selected in the extension preferences.
 
 DICOM data may contain identifying health information. MedBlend does not deliberately copy patient names or patient IDs into Blender, but imported voxel data, ROI and beam names, and technical DICOM identifiers can remain in generated VDB files or the saved `.blend` file. De-identify source data and review exported files before sharing them.
 
@@ -54,9 +54,9 @@ Blender installs the bundled dependency automatically. Open the 3D viewport side
 
 Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. The same four importers are also available from `File > Import` as `DICOM Image Series (CT/MR)`, `DICOM RT Dose`, `DICOM RT Structure Set` and `DICOM RT Ion Plan (proton spots)`. 
 
-If Blender cannot write temporary VDB files in its default temp location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
+If Blender cannot write VDB files in its default location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 
-> **Note on saving .blend files:** Blender volume objects read their voxel data from the VDB file on disk. By default MedBlend writes VDB files to Blender's session temporary directory, which is deleted when Blender exits - so a saved .blend file will lose its volume data on the next reload. If you plan to save your scene, set a persistent `VDB Temp Directory` in the MedBlend preferences first. Files in that directory are never overwritten or cleaned up automatically (each import writes a new uniquely-named file), so clear it out occasionally.
+> **Note on saving .blend files:** Blender volume objects read their voxel data from the VDB file on disk, not from the .blend file. MedBlend keeps those files in a `<file name>_vdb` folder beside your .blend file: imports into a saved scene are written there directly, and imports into an unsaved scene go to Blender's session temporary directory and are copied there the first time you save. Keep that folder with the .blend file when you move or share it. If you set a `VDB Temp Directory` in the MedBlend preferences, that directory is used instead. Files are never overwritten or cleaned up automatically (each import writes a new uniquely-named file), so clear old ones out occasionally.
 
 <img width="393" height="349" alt="Screenshot 2026-03-08 at 9 17 49 pm" src="https://github.com/user-attachments/assets/d000dc5a-3752-46c7-a758-292e3ed7b100" />
 
