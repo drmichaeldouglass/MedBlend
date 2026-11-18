@@ -135,7 +135,11 @@ def _control_points(beam, devices):
             "TableTopRollAngle",
             "TableTopEccentricAngle",
         ):
-            if _finite_float(getattr(cp, name, 0), name) % 360:
+            # Optional attributes are often written present but empty, which
+            # pydicom reads as None. That is "not specified", the same as an
+            # absent attribute, and not a reason to drop the beam.
+            value = getattr(cp, name, None)
+            if value not in (None, "") and _finite_float(value, name) % 360:
                 raise ValueError(f"unsupported nonzero {name}")
         for name in (
             "TableTopVerticalPosition",
@@ -148,10 +152,11 @@ def _control_points(beam, devices):
                 if index and table_positions.get(name) != value:
                     raise ValueError(f"unsupported changing {name}")
                 table_positions[name] = value
-        if hasattr(cp, "IsocenterPosition") or iso is None:
-            iso = _values(
-                getattr(cp, "IsocenterPosition", None), 3, "IsocenterPosition"
-            )
+        # IsocenterPosition is Type 2C: an empty value on a later control
+        # point inherits the previous isocentre, like an absent one.
+        raw_iso = getattr(cp, "IsocenterPosition", None)
+        if raw_iso is not None or iso is None:
+            iso = _values(raw_iso, 3, "IsocenterPosition")
         angles = []
         for axis, (name, direction_name, increasing) in enumerate(_ANGLES):
             raw = getattr(cp, name, None)

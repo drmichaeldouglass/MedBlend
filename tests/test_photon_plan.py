@@ -101,3 +101,38 @@ def test_invalid_boundaries_and_missing_sad():
     device = _devices(beam, notes)["MLCX"]
     assert (device.scale, device.height) == (0.001, 0)
     assert "isocentre" in notes[0]
+
+
+def test_empty_optional_control_point_values_are_treated_as_unspecified():
+    """Present-but-empty optional attributes read as None and mean "not given"."""
+
+    jaw = dataset(RTBeamLimitingDeviceType="ASYMX", NumberOfLeafJawPairs=1)
+    tips = dataset(RTBeamLimitingDeviceType="ASYMX", LeafJawPositions=[-50, 50])
+    first = dataset(
+        IsocenterPosition=[1, 2, 3],
+        GantryAngle=0,
+        BeamLimitingDeviceAngle=0,
+        PatientSupportAngle=0,
+        GantryPitchAngle=None,
+        TableTopPitchAngle=None,
+        TableTopRollAngle=None,
+        TableTopEccentricAngle=None,
+        BeamLimitingDevicePositionSequence=[tips],
+    )
+    last = dataset(IsocenterPosition=None, TableTopEccentricAngle=None)
+    beam = dataset(BeamLimitingDeviceSequence=[jaw], ControlPointSequence=[first, last])
+    devices = _devices(beam, [])
+
+    start, end = _control_points(beam, devices)
+    assert start.isocentre == end.isocentre == (1, 2, 3)
+
+    # A value that is actually given is still checked.
+    last.TableTopEccentricAngle = 5
+    with pytest.raises(ValueError, match="TableTopEccentricAngle"):
+        _control_points(beam, devices)
+    last.TableTopEccentricAngle = None
+
+    # The first control point has nothing to inherit an isocentre from.
+    first.IsocenterPosition = None
+    with pytest.raises(ValueError, match="IsocenterPosition"):
+        _control_points(beam, devices)
