@@ -13,7 +13,7 @@ A medical visualisation extension for Blender.
 
 ## Intended use
 
-MedBlend imports DICOM images, radiotherapy dose, structure sets, and proton plans into Blender to create visualisations for research, education, presentations, and publications.
+MedBlend imports DICOM images, radiotherapy dose, structure sets, and photon and proton plans into Blender to create visualisations for research, education, presentations, and publications.
 
 ## Disclaimer
 
@@ -52,7 +52,7 @@ Blender installs the bundled dependency automatically. Open the 3D viewport side
 
 ## How to use MedBlend
 
-Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. The same four importers are also available from `File > Import` as `DICOM Image Series (CT/MR)`, `DICOM RT Dose`, `DICOM RT Structure Set` and `DICOM RT Ion Plan (proton spots)`. 
+Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. The five importers are also available from `File > Import` as `DICOM Image Series (CT/MR)`, `DICOM RT Dose`, `DICOM RT Structure Set`, `DICOM RT Plan (photon MLC and jaws)` and `DICOM RT Ion Plan (proton spots)`.
 
 If Blender cannot write VDB files in its default location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
 
@@ -61,13 +61,19 @@ If Blender cannot write VDB files in its default location, open the MedBlend add
 <img width="393" height="349" alt="Screenshot 2026-03-08 at 9 17 49 pm" src="https://github.com/user-attachments/assets/d000dc5a-3752-46c7-a758-292e3ed7b100" />
 
 
-MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
+The Medical sidebar contains the following DICOM importers.
 
 - **Load DICOM Images** allows you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. The file dialog also has a `Preset` dropdown, which builds the imported volume's material from one of the [volume rendering presets](#volume-rendering-presets) instead of the default Image Material. 
 
 - **Load DICOM Dose** imports a radiotherapy DICOM dose file and displays the dose distribution as a volume in Blender. 
 
 - **Load DICOM Structures** imports a radiotherapy DICOM structure set. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
+
+- **Load Photon Plan** imports conventional photon RT Plan beams with MLCX, MLCY, symmetric or asymmetric jaws. Open the RT Plan file, then play or scrub the timeline. Beams play in file order starting at the scene start frame. Each beam collection stores its control point frame numbers in the custom property `medblend_control_point_frames`. Motion interpolates linearly between planned control points, including zero-meterset transitions. Frame spacing is chosen for visual playback.
+
+  Leaf widths come from adjacent DICOM leaf boundaries. The two banks move independently along their IEC travel axis. The rectangles reproduce the projected inner edges, with schematic outer lengths and flat tips. When the source-axis and source-to-device distances are present, the rectangles are scaled and placed at the device plane. If only the source-axis distance is available, MedBlend reports the assumed display distance. Without a source-axis distance it displays the aperture at isocentre.
+
+  Photon beams use the plan isocentre, patient setup, gantry, collimator and patient support angles. Import the matching CT first to have the rig follow its transform. Without a matching CT the rig uses DICOM patient coordinates in metres. Head-first and feet-first supine, prone and decubitus setups are supported. Missing patient position defaults to HFS with a notice. Enhanced beam limiting devices, gantry pitch, table pitch/roll, eccentric rotation and dynamic table translations are currently unsupported. Affected beams are skipped with a reason.
 
 - **Load Proton Plan** imports proton scanning beams from a DICOM RT Ion plan and displays spot positions as spheres with radius proportional to relative spot weight. Sizes and colours are scaled to the heaviest spot in the plan, which is drawn 1.3 mm in radius, so they read the same whatever units the plan's meterset weights are in and stay comparable between beams. Each weight range gets its own copy of the node group and Spot Material (`Proton_Spots - 0 to 8`), and the modifier's `Spot Size` can still be changed afterwards. Non-proton ion beams are skipped. Static energy layers that share one geometry are combined into one Blender object, while stepped or arc segments with different gantry, couch, or isocentre geometry are kept in separate objects. If geometry changes during an irradiation segment, DICOM does not specify each spot's intermediate geometry, so MedBlend places that segment at its starting control point and reports a warning.
 
@@ -198,10 +204,6 @@ Upload the archive produced by `extension build` to the Blender Extensions platf
 Please report bugs through [GitHub Issues](https://github.com/drmichaeldouglass/MedBlend/issues).
 
 ## Future Updates
-
-### Import Radiation Therapy Plan Files
-
-Import radiation therapy DICOM plan files to visualise MLC or proton spot positions in the patient CT
 
 ### Import Brachytherapy Dwell Points
 
