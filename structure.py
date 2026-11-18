@@ -59,6 +59,7 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
                 if sop_uid:
                     referenced_sop_uids.add(str(sop_uid))
 
+    frame_uid = _get_structure_frame_uid(dicom_structure)
     candidates: list[pydicom.Dataset] = []
     seen_sop_uids: set[str] = set()
     for file_path in sorted(directory_path.iterdir()):
@@ -69,6 +70,9 @@ def _load_reference_image_slices(directory_path: Path, dicom_structure: pydicom.
         except Exception:
             continue
         if not check_dicom_image_type(ds):
+            continue
+        image_frame = getattr(ds, "FrameOfReferenceUID", None)
+        if frame_uid and image_frame and image_frame != frame_uid:
             continue
         sop_uid = str(getattr(ds, "SOPInstanceUID", ""))
         if not hasattr(ds, "ImagePositionPatient") or not hasattr(ds, "ImageOrientationPatient"):
@@ -258,19 +262,29 @@ def _build_geometry(image_slices: list[pydicom.Dataset]):
     }
 
 
-def _iter_contour_points(dicom_structure: pydicom.Dataset):
-    for roi_contour in getattr(dicom_structure, "ROIContourSequence", []):
-        for contour in getattr(roi_contour, "ContourSequence", []):
-            contour_data = getattr(contour, "ContourData", None)
-            if not contour_data or len(contour_data) < 9 or (len(contour_data) % 3) != 0:
-                continue
-            points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
-            if points_xyz.shape[0] >= 3:
-                yield points_xyz
+def _closed_contour_points(contour: pydicom.Dataset) -> np.ndarray | None:
+    """Return finite polygon vertices, ignoring unsupported geometry types."""
+
+    geometric_type = str(getattr(contour, "ContourGeometricType", None) or "CLOSED_PLANAR")
+    if geometric_type.strip().upper() not in {"CLOSED_PLANAR", "CLOSEDPLANAR_XOR"}:
+        return None
+    points = np.asarray(getattr(contour, "ContourData", None), dtype=float).reshape((-1, 3))
+    if len(points) < 3 or not np.all(np.isfinite(points)):
+        raise ValueError("ContourData must contain at least three finite vertices.")
+    return points
 
 
 def _build_geometry_from_contours(dicom_structure: pydicom.Dataset):
-    contour_sets = list(_iter_contour_points(dicom_structure))
+    contour_sets = []
+    for roi in getattr(dicom_structure, "ROIContourSequence", []):
+        for contour in getattr(roi, "ContourSequence", []):
+            try:
+                points = _closed_contour_points(contour)
+            except (TypeError, ValueError):
+                # The mask pass counts malformed polygons for the import report.
+                continue
+            if points is not None:
+                contour_sets.append(points)
     if not contour_sets:
         raise ValueError("No valid contour points found in this RT Structure Set.")
 
@@ -326,34 +340,37 @@ def _build_geometry_from_contours(dicom_structure: pydicom.Dataset):
 
     row_coords = all_points @ row_axis_dir
     col_coords = all_points @ col_axis_dir
-    slice_coords = all_points @ normal_dir
 
     min_row = float(np.min(row_coords))
     max_row = float(np.max(row_coords))
     min_col = float(np.min(col_coords))
     max_col = float(np.max(col_coords))
 
-    contour_slice_positions = sorted(float(np.mean(points @ normal_dir)) for points in contour_sets)
+    contour_slice_positions = []
+    for points in contour_sets:
+        projected = points @ normal_dir
+        if np.ptp(projected) > 1e-3:
+            raise ValueError("Structure contours do not lie on parallel planes.")
+        contour_slice_positions.append(float(np.mean(projected)))
+
     unique_slices = []
-    for value in contour_slice_positions:
+    for value in sorted(contour_slice_positions):
         if not unique_slices or abs(value - unique_slices[-1]) > 1e-3:
             unique_slices.append(value)
 
+    min_slice, max_slice = unique_slices[0], unique_slices[-1]
+    slice_spacing = 1.0
     if len(unique_slices) > 1:
-        deltas = np.diff(np.asarray(unique_slices, dtype=float))
-        non_zero = np.abs(deltas) > 1e-6
-        if np.any(non_zero):
-            slice_spacing = float(np.median(np.abs(deltas[non_zero])))
-        else:
-            slice_spacing = 1.0
-        min_slice = float(unique_slices[0])
-        max_slice = float(unique_slices[-1])
-    else:
-        slice_spacing = 1.0
-        min_slice = float(np.min(slice_coords))
-        max_slice = float(np.max(slice_coords))
-    if slice_spacing <= 0:
-        slice_spacing = 1.0
+        # A missing contour plane leaves a gap. The median gap may move or
+        # merge contours, so verify the inferred lattice against every plane.
+        deltas = np.diff(unique_slices)
+        smallest_gap = np.min(deltas)
+        intervals = np.rint(deltas / smallest_gap)
+        slice_spacing = (max_slice - min_slice) / np.sum(intervals)
+        distances = np.asarray(unique_slices) - min_slice
+        grid_distances = np.rint(distances / slice_spacing) * slice_spacing
+        if not np.allclose(distances, grid_distances, rtol=0, atol=1e-3):
+            raise ValueError("Could not infer uniform contour spacing. Supply the reference images.")
 
     rows = max(1, int(np.ceil((max_row - min_row) / row_spacing)) + 2)
     cols = max(1, int(np.ceil((max_col - min_col) / col_spacing)) + 2)
@@ -387,16 +404,19 @@ def _build_geometry_from_contours(dicom_structure: pydicom.Dataset):
 
 
 def _get_structure_frame_uid(dicom_structure: pydicom.Dataset) -> str:
-    frame_uid = str(getattr(dicom_structure, "FrameOfReferenceUID", ""))
-    if frame_uid:
-        return frame_uid
-    try:
-        frame_refs = getattr(dicom_structure, "ReferencedFrameOfReferenceSequence", [])
-        if frame_refs:
-            return str(getattr(frame_refs[0], "FrameOfReferenceUID", ""))
-    except Exception:
-        pass
-    return ""
+    frame_uids = {getattr(dicom_structure, "FrameOfReferenceUID", None)}
+    frame_uids.update(
+        getattr(ref, "FrameOfReferenceUID", None)
+        for ref in getattr(dicom_structure, "ReferencedFrameOfReferenceSequence", [])
+    )
+    frame_uids.update(
+        getattr(roi, "ReferencedFrameOfReferenceUID", None)
+        for roi in getattr(dicom_structure, "StructureSetROISequence", [])
+    )
+    known_frames = {str(uid) for uid in frame_uids if uid}
+    if len(known_frames) > 1:
+        raise ValueError("Structure contours reference multiple frames of reference.")
+    return next(iter(known_frames), "")
 
 
 def _polygon_mask(shape: tuple[int, int], polygon_rc: np.ndarray) -> np.ndarray:
@@ -542,36 +562,19 @@ def iter_roi_masks(dicom_structure: pydicom.Dataset, geometry):
         skipped = 0
 
         for contour in getattr(roi_contour, "ContourSequence", []):
-            # Only closed planar contours describe filled regions; open
-            # contours and single points must not be rasterized as polygons.
-            # The tag is Type 1 but exports do leave it empty, and pydicom then
-            # yields ``None`` - stringifying that gives "NONE", which matches no
-            # known type and used to drop every contour of the ROI in silence.
-            raw_geometric_type = getattr(contour, "ContourGeometricType", None)
-            geometric_type = (
-                str(raw_geometric_type).strip().upper() if raw_geometric_type else "CLOSED_PLANAR"
-            )
-            if geometric_type not in {"CLOSED_PLANAR", "CLOSEDPLANAR_XOR"}:
-                continue
-            # A corrupt coordinate would otherwise raise out of the rasteriser
-            # and abandon every ROI still queued behind this one, so count the
-            # contour and step over it instead. pydicom hands back the raw
-            # strings of a malformed DS value rather than floats, so numpy is
-            # where that surfaces.
             try:
-                contour_data = getattr(contour, "ContourData", None)
-                if not contour_data or len(contour_data) < 9 or len(contour_data) % 3 != 0:
-                    continue
-                points_xyz = np.asarray(contour_data, dtype=float).reshape((-1, 3))
+                points_xyz = _closed_contour_points(contour)
             except (TypeError, ValueError):
                 skipped += 1
                 continue
-            if not np.all(np.isfinite(points_xyz)):
-                skipped += 1
+            if points_xyz is None:
                 continue
 
             ijk = _contour_points_to_ijk(points_xyz, origin, inv_basis)
-
+            if np.ptp(ijk[:, 2]) * geometry["spacing"][0] > 1e-3:
+                # A mask slice cannot represent a polygon tilted across planes.
+                skipped += 1
+                continue
             slice_index = int(np.rint(np.mean(ijk[:, 2])))
             if slice_index < 0 or slice_index >= num_slices:
                 # The contour lies outside the reconstructed slice range, which
@@ -733,7 +736,7 @@ def load_structures(file_path: Path) -> bool:
     if skipped_contours:
         notes.append(
             f"{skipped_contours} contour(s) could not be rasterised and were skipped "
-            "(outside the reconstructed slice range, or malformed coordinates)"
+            "(outside the slice range, tilted across planes, or malformed coordinates)"
         )
     if notes:
         show_message_box(

@@ -8,10 +8,14 @@ import bpy
 def show_message_box(message: str = "", title: str = "Message", icon: str = "INFO") -> None:
     """Show a popup, falling back to the console when no window is available.
 
-    ``popup_menu`` requires an interactive window manager, so it raises in
+    ``popup_menu`` requires an interactive window manager, and can crash in
     background/headless runs. Import failures must still be reported there
     rather than masking the original problem with a UI error.
     """
+
+    if bpy.app.background:
+        print(f"MedBlend [{title}] {message}")
+        return
 
     def draw(self, _context):
         for line in str(message).splitlines() or [""]:

@@ -494,3 +494,59 @@ class TestStructureObjectNames:
                 raise RuntimeError("read-only")
 
         _name_after_roi(Locked(), "CON")
+
+
+def test_fallback_geometry_ignores_open_and_malformed_contours():
+    structure = make_structure_set()
+    reference = _build_geometry_from_contours(structure)
+    contours = structure.ROIContourSequence[0].ContourSequence
+    for kind, z in [("OPEN_NONPLANAR", 800.0), ("CLOSED_PLANAR", float("nan"))]:
+        contour = Dataset()
+        contour.ContourGeometricType = kind
+        contour.ContourData = [0, 0, z, 0, 1, z + 2, 1, 1, z]
+        contours.insert(0, contour)
+    geometry = _build_geometry_from_contours(structure)
+    for key in ("origin", "basis", "rows", "cols", "num_slices"):
+        np.testing.assert_allclose(geometry[key], reference[key])
+    _, mask, _, skipped = next(iter_roi_masks(structure, geometry))
+    assert mask.any() and skipped == 1
+
+
+def test_sparse_contour_planes_keep_their_patient_positions():
+    from copy import deepcopy
+
+    structure = make_structure_set()
+    contours = structure.ROIContourSequence[0].ContourSequence
+    extra = deepcopy(contours[-1])
+    extra.ContourData[2::3] = [12.0] * 4
+    contours.append(extra)
+    geometry = _build_geometry_from_contours(structure)
+    _, mask, _, _ = next(iter_roi_masks(structure, geometry))
+    indices = np.flatnonzero(mask.any(axis=(1, 2)))
+    world_z = geometry["origin"][2] + geometry["vdb_basis"][2, 0] * indices
+    np.testing.assert_allclose(sorted(world_z), [3, 6, 12])
+
+
+def test_tilted_contour_is_not_flattened_into_reference_slice():
+    structure = make_structure_set()
+    structure.ROIContourSequence[0].ContourSequence[1].ContourData[2] += 2
+    _, mask, _, skipped = next(iter_roi_masks(structure, build_reference_geometry()))
+    assert skipped == 1 and len(np.flatnonzero(mask.any(axis=(1, 2)))) == 1
+
+
+def test_structure_reference_search_excludes_unrelated_frame(tmp_path):
+    ds = make_slice(0)
+    ds.FrameOfReferenceUID = "1.2.9"
+    write_slice(tmp_path, ds, "unrelated.dcm")
+    structure = make_structure_set()
+    del structure.FrameOfReferenceUID
+    structure.StructureSetROISequence[0].ReferencedFrameOfReferenceUID = "1.2.8"
+    assert not _load_reference_image_slices(tmp_path, structure)
+    assert _get_structure_frame_uid(structure) == "1.2.8"
+
+
+def test_multiple_roi_frames_are_rejected_before_rasterising():
+    structure = make_structure_set()
+    structure.StructureSetROISequence[0].ReferencedFrameOfReferenceUID = "1.2.3"
+    with pytest.raises(ValueError, match="multiple frames of reference"):
+        _get_structure_frame_uid(structure)

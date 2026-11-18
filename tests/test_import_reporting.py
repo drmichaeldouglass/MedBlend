@@ -8,6 +8,7 @@ either, because dose, structures and plans all co-register through it.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pydicom
@@ -255,3 +256,72 @@ class TestDosePlacementReporting:
         assert "orientation is not invertible" in message
         # The dose metadata is still written, so the volume stays usable.
         assert stub_volume_writer[0].get("medblend_dose_units") == "GY"
+
+
+@pytest.mark.parametrize("position", [3.0, None])
+def test_unusable_slice_position_cancels_ct_before_write(
+    tmp_path, position, captured, stub_volume_writer
+):
+    first, second = make_slice(2), make_slice(4, instance=1)
+    first.ImagePositionPatient = position
+    write_slice(tmp_path, first, "first.dcm")
+    write_slice(tmp_path, second, "second.dcm")
+    assert not ct_module.load_ct_series(tmp_path / "first.dcm")
+    assert "ImagePositionPatient" in captured[0][1]
+    assert not stub_volume_writer
+
+
+def test_unlocated_ct_keeps_voxels_and_warns(tmp_path, captured, stub_volume_writer):
+    for i in range(2):
+        ds = make_slice(i, instance=i)
+        del ds.ImagePositionPatient
+        write_slice(tmp_path, ds, f"{i}.dcm")
+    assert ct_module.load_ct_series(tmp_path / "0.dcm")
+    assert "ImagePositionPatient" in captured[0][1]
+    assert stub_volume_writer[0].get("medblend_ct_basis_mm") is None
+
+
+@pytest.mark.parametrize(
+    ("planes", "offsets", "success"),
+    [(1, 15.0, True), (1, [0.0, 3.0], False), (2, 0.0, False)],
+)
+def test_dose_offset_count_uses_decoded_planes(
+    tmp_path, captured, stub_volume_writer, planes, offsets, success
+):
+    path = make_dose_dataset(tmp_path, [1, 0, 0, 0, 1, 0])
+    ds = pydicom.dcmread(path)
+    ds.ImagePositionPatient = [0, 0, 15]
+    ds.NumberOfFrames = planes
+    ds.PixelData = ds.PixelData[:planes * 8]
+    ds.GridFrameOffsetVector = offsets
+    ds.save_as(path)
+    assert dose_module.load_dose(path) is success
+    assert bool(stub_volume_writer) is success
+    if success:
+        assert not captured
+    else:
+        assert "one position for every dose plane" in captured[0][1]
+
+
+@pytest.mark.parametrize("position", [None, [2, 3, float("nan")]])
+def test_dose_with_unusable_origin_warns(tmp_path, captured, stub_volume_writer, position):
+    path = make_dose_dataset(tmp_path, [1, 0, 0, 0, 1, 0])
+    ds = pydicom.dcmread(path)
+    ds.ImagePositionPatient = position
+    ds.save_as(path)
+    assert dose_module.load_dose(path)
+    assert "ImagePositionPatient" in captured[0][1]
+    assert stub_volume_writer[0].matrix_world is None
+
+
+def test_background_error_reporting_never_calls_popup(monkeypatch, capsys):
+    import bpy
+    from MedBlend.ui_utils import show_message_box
+
+    monkeypatch.setattr(bpy.app, "background", True)
+    def unsafe_popup(*args, **kwargs):
+        pytest.fail("unsafe background popup")
+
+    monkeypatch.setattr(bpy.context, "window_manager", SimpleNamespace(popup_menu=unsafe_popup))
+    show_message_box("Invalid DICOM", "Error", "ERROR")
+    assert "MedBlend [Error] Invalid DICOM" in capsys.readouterr().out

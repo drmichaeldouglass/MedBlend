@@ -166,8 +166,11 @@ def sort_slices_spatially(images: Sequence[pydicom.Dataset]) -> List[pydicom.Dat
         return images
 
     normal = _slice_normal(images[0])
-    positions = [getattr(ds, "ImagePositionPatient", None) for ds in images]
-    if normal is None or any(pos is None or len(pos) != 3 for pos in positions):
+    positions = [
+        _optional_numeric_vector(getattr(ds, "ImagePositionPatient", None), 3, "ImagePositionPatient", i)
+        for i, ds in enumerate(images, start=1)
+    ]
+    if normal is None or any(pos is None for pos in positions):
         return sort_by_instance_number(images)
 
     projections = [float(np.dot(np.asarray(pos, dtype=float), normal)) for pos in positions]
@@ -305,7 +308,7 @@ def _optional_numeric_vector(
 
 def extract_dicom_data(
     images: Sequence[pydicom.Dataset],
-) -> Tuple[np.ndarray, Sequence[float], Sequence[float], float, Sequence[float], Sequence[float]]:
+) -> Tuple[np.ndarray, Sequence[float], Sequence[Sequence[float]], float, Sequence[float] | None, Sequence[float]]:
     """Extract voxel data and metadata from the provided DICOM slices."""
 
     if not images:
@@ -404,9 +407,7 @@ def extract_dicom_data(
             raise ValueError(f"Slice {index + 1} contains non-finite intensity values.")
         dicom_3d_array.append(pixels)
         raw_position = getattr(dataset, "ImagePositionPatient", None)
-        if raw_position is None:
-            slice_positions.append((0.0, 0.0, 0.0))
-        else:
+        if raw_position is not None:
             slice_positions.append(
                 _optional_numeric_vector(
                     raw_position,
@@ -416,6 +417,9 @@ def extract_dicom_data(
                 )
             )
 
+    if slice_positions and len(slice_positions) != len(images):
+        raise ValueError("ImagePositionPatient is missing on some slices of the series.")
+
     array = np.asarray(dicom_3d_array, dtype=np.float32)
     array = np.flipud(array)
 
@@ -423,7 +427,7 @@ def extract_dicom_data(
     if spacing is None or len(spacing) < 2:
         spacing = (1.0, 1.0)
     spacing = (positive_float_or(spacing[0], 1.0), positive_float_or(spacing[1], 1.0))
-    image_origin = getattr(first, "ImagePositionPatient", (0.0, 0.0, 0.0))
+    image_origin = getattr(first, "ImagePositionPatient", None)
     image_orientation = getattr(first, "ImageOrientationPatient", (0.0,) * 6)
     slice_spacing = _compute_slice_spacing(
         slice_positions,

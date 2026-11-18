@@ -243,7 +243,7 @@ def find_ct_anchor(frame_uid: str) -> Optional[bpy.types.Object]:
     ("CT_10" precedes "CT_9"), so the recorded import index decides instead.
     """
 
-    ct_candidates = [obj for obj in bpy.data.objects if bool(obj.get("medblend_is_ct"))]
+    ct_candidates = [obj for obj in bpy.context.scene.objects if obj.get("medblend_is_ct")]
     if frame_uid:
         ct_candidates = [
             obj for obj in ct_candidates if obj.get("medblend_frame_of_reference_uid", "") == frame_uid

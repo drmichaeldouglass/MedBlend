@@ -311,3 +311,10 @@ class TestTempPaths:
 
     def test_free_name_is_used_as_is(self, tmp_path):
         assert _unique_path(tmp_path, "dose.vdb").name == "dose.vdb"
+
+
+def test_ct_in_another_scene_is_not_an_alignment_anchor(monkeypatch):
+    ct = make_ct_object("1.2.3")
+    monkeypatch.setattr(bpy.data, "objects", [ct])
+    monkeypatch.setattr(bpy.context.scene, "objects", [])
+    assert find_ct_anchor("1.2.3") is None
