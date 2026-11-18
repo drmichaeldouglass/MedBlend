@@ -39,7 +39,7 @@ def load_ct_series(
     emission_strength: float = DEFAULT_EMISSION_STRENGTH,
 ) -> bool:
     try:
-        selected_file = pydicom.dcmread(file_path)
+        selected_file = pydicom.dcmread(file_path, stop_before_pixels=True)
     except Exception as exc:
         show_message_box(f"Unable to read file: {exc}", "Error", "ERROR")
         return False
@@ -53,7 +53,11 @@ def load_ct_series(
         show_message_box("Missing SeriesInstanceUID on selected DICOM.", "Error", "ERROR")
         return False
 
-    images = load_dicom_series(file_path.parent, series_uid)
+    try:
+        images = load_dicom_series(file_path.parent, series_uid)
+    except OSError as exc:
+        show_message_box(f"Unable to read image directory: {exc}", "Error", "ERROR")
+        return False
     if not images:
         show_message_box(
             "No readable CT/MR slices for this series were found next to the selected "
@@ -63,9 +67,9 @@ def load_ct_series(
             "ERROR",
         )
         return False
-    sorted_images = sort_slices_spatially(images)
 
     try:
+        sorted_images = sort_slices_spatially(images)
         (
             ct_volume,
             spacing,
@@ -110,6 +114,8 @@ def load_ct_series(
 
     placement_error = None
     try:
+        if image_origin is None:
+            raise ValueError("ImagePositionPatient is missing")
         row_dir, col_dir, normal_dir = image_orientation_axes(image_orientation)
 
         # Array axis 0 is flipped in extract_dicom_data, so the imported array origin

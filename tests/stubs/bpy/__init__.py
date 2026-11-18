@@ -122,12 +122,13 @@ class _Handlers:
 
 
 class app:
+    background = False
     tempdir = "/tmp"
     cachedir = "/tmp"
     handlers = _Handlers()
 
 
-context = _Namespace()
+context = _Namespace(scene=_Namespace(objects=data.objects))
 ops = _Namespace()
 
 

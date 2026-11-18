@@ -24,7 +24,7 @@ from .volume_utils import (
 DEFAULT_DOSE_INTENSITY = 5.0
 
 
-def dose_grid_spacing(dataset: pydicom.Dataset) -> tuple[list[float], float]:
+def dose_grid_spacing(dataset: pydicom.Dataset, plane_count: int | None = None) -> tuple[list[float], float]:
     """Return ``([slice, row, col] spacing in mm, signed slice step)``.
 
     Every scalar goes through ``float_or``/``positive_float_or``: DICOM Type 2
@@ -34,17 +34,28 @@ def dose_grid_spacing(dataset: pydicom.Dataset) -> tuple[list[float], float]:
     ``GridFrameOffsetVector`` may run opposite to the slice normal.
     """
 
-    pixel_spacing = getattr(dataset, "PixelSpacing", None) or [1.0, 1.0]
-    row_spacing = positive_float_or(pixel_spacing[0] if len(pixel_spacing) > 0 else None, 1.0)
-    col_spacing = positive_float_or(pixel_spacing[1] if len(pixel_spacing) > 1 else None, 1.0)
-
-    raw_offsets = getattr(dataset, "GridFrameOffsetVector", None) or []
+    pixel_spacing = getattr(dataset, "PixelSpacing", None)
+    if pixel_spacing is None:
+        pixel_spacing = (1.0, 1.0)
     try:
-        offsets = np.asarray([float(value) for value in raw_offsets], dtype=float)
+        row, col = pixel_spacing
+    except (TypeError, ValueError) as exc:
+        raise ValueError("PixelSpacing must contain row and column spacing.") from exc
+    row_spacing = positive_float_or(row, 1.0)
+    col_spacing = positive_float_or(col, 1.0)
+
+    raw_offsets = getattr(dataset, "GridFrameOffsetVector", None)
+    try:
+        offsets = np.atleast_1d(np.asarray([] if raw_offsets is None else raw_offsets, dtype=float))
     except (TypeError, ValueError) as exc:
         raise ValueError("GridFrameOffsetVector contains a non-numeric value.") from exc
 
-    if offsets.size and not np.all(np.isfinite(offsets)):
+    if plane_count is not None and (offsets.size or plane_count > 1) and offsets.size != plane_count:
+        raise ValueError(
+            "GridFrameOffsetVector must contain one position for every dose plane "
+            f"({offsets.size} offsets for {plane_count} planes)."
+        )
+    if not np.all(np.isfinite(offsets)):
         raise ValueError("GridFrameOffsetVector contains a non-finite value.")
 
     signed_slice_step = None
@@ -108,19 +119,7 @@ def load_dose(file_path: Path) -> bool:
         show_message_box(f"Unable to parse dose grid: {exc}", "Error", "ERROR")
         return False
 
-    try:
-        dose_resolution, signed_slice_step = dose_grid_spacing(dataset)
-        dose_grid_scale = dose_grid_scaling(dataset)
-    except ValueError as exc:
-        show_message_box(str(exc), "Error", "ERROR")
-        return False
-    slice_spacing, row_spacing, col_spacing = dose_resolution
-
     dose_matrix = np.asarray(pixel_data, dtype=np.float32)
-    dose_matrix = dose_matrix * np.float32(dose_grid_scale)
-    if not np.all(np.isfinite(dose_matrix)):
-        show_message_box("Dose grid contains non-finite values.", "Error", "ERROR")
-        return False
     if dose_matrix.ndim == 2:
         dose_matrix = dose_matrix[np.newaxis, ...]
     elif dose_matrix.ndim != 3:
@@ -131,14 +130,17 @@ def load_dose(file_path: Path) -> bool:
         )
         return False
 
-    raw_offsets = getattr(dataset, "GridFrameOffsetVector", None) or []
-    if dose_matrix.shape[0] > 1 and len(raw_offsets) != dose_matrix.shape[0]:
-        show_message_box(
-            "GridFrameOffsetVector must contain one position for every dose plane "
-            f"({len(raw_offsets)} offsets for {dose_matrix.shape[0]} planes).",
-            "Error",
-            "ERROR",
-        )
+    try:
+        dose_resolution, signed_slice_step = dose_grid_spacing(dataset, dose_matrix.shape[0])
+        dose_grid_scale = dose_grid_scaling(dataset)
+    except ValueError as exc:
+        show_message_box(str(exc), "Error", "ERROR")
+        return False
+    slice_spacing, row_spacing, col_spacing = dose_resolution
+
+    dose_matrix = dose_matrix * np.float32(dose_grid_scale)
+    if not np.all(np.isfinite(dose_matrix)):
+        show_message_box("Dose grid contains non-finite values.", "Error", "ERROR")
         return False
 
     result = write_vdb_volume(dose_matrix, dose_resolution, "dose.vdb")
@@ -148,9 +150,11 @@ def load_dose(file_path: Path) -> bool:
 
     placement_error = None
     try:
-        dose_origin = np.asarray(getattr(dataset, "ImagePositionPatient", [0.0, 0.0, 0.0]), dtype=float)
+        dose_origin = np.asarray(getattr(dataset, "ImagePositionPatient", None), dtype=float)
+        if dose_origin.shape != (3,) or not np.all(np.isfinite(dose_origin)):
+            raise ValueError("ImagePositionPatient must contain three finite values")
         row_dir, col_dir, normal_dir = image_orientation_axes(
-            getattr(dataset, "ImageOrientationPatient", [1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+            getattr(dataset, "ImageOrientationPatient", None)
         )
 
         # Keep origin anchored to ImagePositionPatient (frame 0).
