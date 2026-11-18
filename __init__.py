@@ -17,6 +17,7 @@ from bpy_extras.io_utils import ImportHelper
 from . import presets
 from .ct import load_ct_series
 from .dose import load_dose
+from .photon_plan import load_photon_plan
 from .plan import load_proton_plan
 from .structure import load_structures
 from .volume_materials import (
@@ -190,7 +191,8 @@ class MEDBLEND_PT_Main(bpy.types.Panel):
         layout.operator("medblend.load_dose", text="Load DICOM Dose", icon="FILEBROWSER")
         layout.label(text="Structures")
         layout.operator("medblend.load_structures", text="Load DICOM Structures", icon="FILEBROWSER")
-        layout.label(text="Proton Spots")
+        layout.label(text="Treatment Plans")
+        layout.operator("medblend.load_photon", text="Load Photon Plan", icon="FILEBROWSER")
         layout.operator("medblend.load_proton", text="Load Proton Plan", icon="FILEBROWSER")
         layout.separator()
         layout.label(text="Image Volume Presets")
@@ -307,6 +309,17 @@ class MEDBLEND_OT_Load_Ct(bpy.types.Operator, ImportHelper):
         return _run_import(self, loader)
 
 
+class MEDBLEND_OT_Load_Photon(bpy.types.Operator, ImportHelper):
+    bl_idname = "medblend.load_photon"
+    bl_label = "Load Photon Plan"
+    bl_description = "Animate MLC leaves and jaws from a DICOM photon treatment plan"
+    bl_options = {"REGISTER", "UNDO"}
+    filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
+
+    def execute(self, _context):
+        return _run_import(self, load_photon_plan)
+
+
 class MEDBLEND_OT_Load_Proton(bpy.types.Operator, ImportHelper):
     bl_idname = "medblend.load_proton"
     bl_label = "Load Proton"
@@ -347,6 +360,7 @@ _FILE_IMPORT_ENTRIES = (
     ("medblend.load_ct", "DICOM Image Series (CT/MR)"),
     ("medblend.load_dose", "DICOM RT Dose"),
     ("medblend.load_structures", "DICOM RT Structure Set"),
+    ("medblend.load_photon", "DICOM RT Plan (photon MLC and jaws)"),
     ("medblend.load_proton", "DICOM RT Ion Plan (proton spots)"),
 )
 
@@ -375,6 +389,7 @@ classes: tuple[type, ...] = (
     MEDBLEND_OT_Select_Vdb_Temp_Dir,
     MEDBLEND_OT_Clear_Vdb_Temp_Dir,
     MEDBLEND_OT_Load_Ct,
+    MEDBLEND_OT_Load_Photon,
     MEDBLEND_OT_Load_Proton,
     MEDBLEND_OT_Load_Dose,
     MEDBLEND_OT_Load_Structures,

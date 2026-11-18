@@ -13,7 +13,7 @@ A medical visualisation extension for Blender.
 
 ## Intended use
 
-MedBlend imports DICOM images, radiotherapy dose, structure sets, and proton plans into Blender to create visualisations for research, education, presentations, and publications.
+MedBlend imports DICOM images, radiotherapy dose, structure sets, and photon and proton plans into Blender to create visualisations for research, education, presentations, and publications.
 
 ## Disclaimer
 
@@ -33,53 +33,79 @@ The extension package includes the `pydicom` wheel declared in `blender_manifest
 
 ## Installation
 
-### Blender Extensions platform
+Use **Blender 5.0 or newer**. For photon MLC animation, choose **MedBlend 2.1.0 or newer**. The 2.0.0 package includes the proton importer. Blender installs the bundled Python dependency when you install the extension.
 
-Once MedBlend has been approved and published:
+### Get the extension ZIP
 
-1. Open `Edit > Preferences > Get Extensions`.
-2. Search for `MedBlend`.
-3. Select `Install`.
+| Where you are installing from | Which file to use |
+| --- | --- |
+| A published release | Open [MedBlend Releases](https://github.com/drmichaeldouglass/MedBlend/releases), expand **Assets** for the version you want, and download the file named `medblend-<version>.zip`. Leave that ZIP intact for Blender. |
+| The photon-plan pull request | Sign in to GitHub and open the [successful photon build](https://github.com/drmichaeldouglass/MedBlend/actions/runs/44378863678). Under **Artifacts**, download **medblend-extension**. Unzip that outer download once to get **`medblend-2.1.0.zip`**. This inner ZIP is the file Blender installs. |
 
-### Install a release package from disk
+GitHub Actions artifacts expire. If the build download has expired, check the release assets for 2.1.0 or newer, or download the [photon-plan source](https://github.com/drmichaeldouglass/MedBlend/tree/feature/photon-plan-mlc) and follow the [build instructions](#development).
 
-1. Download the `medblend-<version>.zip` asset from the [latest GitHub release](https://github.com/drmichaeldouglass/MedBlend/releases/latest). Do not use GitHub's automatically generated "Source code" archives.
-2. In Blender 5.0 or newer, open `Edit > Preferences > Get Extensions`.
-3. Open the menu in the top-right corner and choose `Install from Disk`.
-4. Select the downloaded extension package.
+### Install in Blender
 
-Blender installs the bundled dependency automatically. Open the 3D viewport sidebar with `N`, then select the `Medical` tab.
+1. Open **Edit → Preferences → Get Extensions**.
+2. Click the small **⌄** at the far right of the top row, beside **Repositories**, and choose **Install from Disk…**.
+3. Select the extension ZIP and confirm. Under **Preferences → Add-ons**, search for **MedBlend** and check that it is enabled.
+4. Close Preferences. Move the pointer over the **3D Viewport**, press **N** to open its sidebar, then select the vertical **Medical** tab. You can also reach the DICOM importers through **File → Import**. Look for **DICOM RT Plan (photon MLC and jaws)** or **DICOM RT Ion Plan (proton spots)** there.
+
+![Blender Get Extensions preferences with the far-right dropdown beside Repositories outlined in amber](.github/images/install-extensions-menu.png)
+
+*The highlighted dropdown contains Install from Disk. Screenshot cropped and annotated from the [Blender 5.2 Manual](https://docs.blender.org/manual/en/5.2/editors/preferences/extensions.html), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).*
 
 ## How to use MedBlend
 
-Once installed, open the 3D viewport and select the Medical category from the sidebar. Press N on the keyboard if it is not visible. The same four importers are also available from `File > Import` as `DICOM Image Series (CT/MR)`, `DICOM RT Dose`, `DICOM RT Structure Set` and `DICOM RT Ion Plan (proton spots)`. 
+### Import a patient study
 
-If Blender cannot write VDB files in its default location, open the MedBlend add-on preferences and set a `VDB Temp Directory` that your user account can write to.
+1. Save your Blender scene, for example as `study.blend`.
+2. In the **Medical** sidebar, choose **Load DICOM Images** and select **one slice** from the planning CT or MR series. MedBlend finds the other slices with the same series UID in that directory. For CT, try **CT-Bone** in the file dialog’s **Preset** dropdown. You can change the [volume rendering preset](#volume-rendering-presets) later.
+3. Add the corresponding structures, dose or plan with the buttons below. For a structure set, place the RTSTRUCT file beside its referenced image slices so MedBlend can use their voxel grid. For a photon plan, importing the matching CT first lets the beam rig follow the CT when you move, rotate or scale it.
 
-> **Note on saving .blend files:** Blender volume objects read their voxel data from the VDB file on disk, not from the .blend file. MedBlend keeps those files in a `<file name>_vdb` folder beside your .blend file: imports into a saved scene are written there directly, and imports into an unsaved scene go to Blender's session temporary directory and are copied there the first time you save. Keep that folder with the .blend file when you move or share it. If you set a `VDB Temp Directory` in the MedBlend preferences, that directory is used instead. Files are never overwritten or cleaned up automatically (each import writes a new uniquely-named file), so clear old ones out occasionally.
+<img src=".github/images/medical-image-importers.webp" width="390" alt="MedBlend sidebar showing the Load DICOM Images, Load DICOM Dose and Load DICOM Structures buttons">
 
-<img width="393" height="349" alt="Screenshot 2026-03-08 at 9 17 49 pm" src="https://github.com/user-attachments/assets/d000dc5a-3752-46c7-a758-292e3ed7b100" />
+| Medical sidebar button | Select in the file browser | What appears in Blender |
+| --- | --- | --- |
+| **Load DICOM Images** | One CT or MR slice | A volume containing the image series. |
+| **Load DICOM Structures** | RT Structure Set (RTSTRUCT) | A separate volume for each imported ROI, coloured from the structure set. |
+| **Load DICOM Dose** | RT Dose (RTDOSE) | A dose volume. The object’s custom properties record its maximum dose and the DICOM dose units. |
+| **Load Photon Plan** | Conventional photon RT Plan (RTPLAN) | A collection for each imported beam, containing animated MLC leaves and jaws. [View the playback example](#play-a-photon-plan). |
+| **Load Proton Plan** | Scanned proton RT Ion Plan | Spot spheres grouped by beam geometry. The sphere radius represents relative spot weight, with a common scale across the plan. |
 
+### Play a photon plan
 
-MedBlend currently has 4 main functions: Load DICOM images, Load DICOM Dose, Load DICOM structures and Load Proton Plan. Each of these functions imports a specific DICOM medical file. 
+1. Choose **Load Photon Plan** and open the RT Plan file. In the **Outliner**, expand **Photon Plan …** and a beam collection to see its MLC leaves and jaws. With a matching CT already loaded, the rig is registered to the CT. A standalone import uses DICOM patient coordinates in metres.
+2. Drag the **Timeline** playhead or click **Play**. Beams appear in file order. Within each beam, the leaf tips, isocentre, gantry, collimator and couch follow the planned control points. To see the opening clearly, look along the beam axis towards isocentre.
+3. To inspect a specific control point, select the **beam collection** in the Outliner and open **Collection Properties → Custom Properties**. The entries in `medblend_control_point_frames` are the Blender frame numbers for control points 0, 1, 2 and so on. Enter one in the Timeline’s current-frame field to jump there.
 
-- **Load DICOM Images** allows you to load a DICOM image sequence from a specified folder. When you press the load images button, a file dialog will appear. Select a single DICOM image from this folder. MedBlend will search through the same directory and load all DICOM images belonging to the same series (matching SeriesInstanceUID) into Blender automatically. These image slices will be imported and converted to a volume object which can be rendered in Blender. The file dialog also has a `Preset` dropdown, which builds the imported volume's material from one of the [volume rendering presets](#volume-rendering-presets) instead of the default Image Material. 
+![Beam’s-eye views of the same MLC at frames 1, 16 and 31. The two leaf banks form a broad opening, narrow it and shift it laterally as the gantry moves from 0 to 90 degrees.](.github/images/photon-mlc-playback.png)
 
-- **Load DICOM Dose** imports a radiotherapy DICOM dose file and displays the dose distribution as a volume in Blender. 
+*Three control points from a synthetic plan imported in Blender 5.2. Each view follows the collimator. Blue and amber identify the banks for this illustration. The dark opening is the aperture.*
 
-- **Load DICOM Structures** imports a radiotherapy DICOM structure set. Each ROI is rasterised onto the referenced CT grid and imported as its own volume object, cropped to the bounding box of that structure so a single ROI does not carry the whole CT grid. Each structure gets its own copy of the structure material, tinted with the `ROIDisplayColor` from the planning system, so the ROIs are distinguishable as soon as they are imported. 
+**Geometry and timing.** MLCX and MLCY leaf widths come from adjacent DICOM leaf boundaries. The rectangular leaves have schematic outer lengths and flat tips. When both source-axis and source-to-device distances are available, MedBlend scales the aperture to the device plane. A missing device distance triggers a notice with the assumed distance. A missing source-axis distance places the aperture at isocentre. Motion interpolates linearly between control points, including zero-meterset transitions. Timeline spacing is for visual playback.
 
-- **Load Proton Plan** imports proton scanning beams from a DICOM RT Ion plan and displays spot positions as spheres with radius proportional to relative spot weight. Sizes and colours are scaled to the heaviest spot in the plan, which is drawn 1.3 mm in radius, so they read the same whatever units the plan's meterset weights are in and stay comparable between beams. Each weight range gets its own copy of the node group and Spot Material (`Proton_Spots - 0 to 8`), and the modifier's `Spot Size` can still be changed afterwards. Non-proton ion beams are skipped. Static energy layers that share one geometry are combined into one Blender object, while stepped or arc segments with different gantry, couch, or isocentre geometry are kept in separate objects. If geometry changes during an irradiation segment, DICOM does not specify each spot's intermediate geometry, so MedBlend places that segment at its starting control point and reports a warning.
+**Supported setups.** Photon import supports head-first and feet-first supine, prone and decubitus setups. A missing patient position defaults to HFS with a notice. MedBlend skips beams that use enhanced beam limiting devices, gantry pitch, table pitch or roll, eccentric rotation or dynamic table translations, and reports the reason.
 
-## How to add Materials to the CT and dose volumes
+### Inspect a proton plan
 
-Some default materials for CT, MRI and Dose volumes have been included in this add-on. When a DICOM image or DICOM dose volume is imported, a default material is automatically created. Select the materials menu from the menu on the right side, and select either Image Material for CT volumes or Dose Material for dose volumes. 
+Choose **Load Proton Plan** and open the RT Ion Plan file. Static energy layers with the same geometry share an object. Stepped or arc segments with different geometry appear as separate objects. Select a spot object and adjust **Spot Size** in its Geometry Nodes modifier to make the pattern easier to see. At the default scale, the heaviest spot in the plan has a radius of 1.3 mm. The [proton phantom example](#example-imports) shows the spots together with CT and dose.
 
-![materials](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/baf02ebf-5781-4c84-8884-39ff74582adf)
+The proton importer assumes head-first supine orientation and warns about other positions. It skips non-proton ion beams. If geometry changes during an irradiation segment, the spots are displayed at that segment’s starting geometry and MedBlend reports a warning.
 
-With the CT or dose object selected in the outliner (top right), go to the shader/material menu (red icon in lower right) and select either the Image Material or Dose Material depending on what type of volume you have imported.
+### Save and move the scene
 
-To change the material properties, select the Shading tab from the top edge and you should see the Material node setup shown in the bottom panel. MedBlend works with both the Eevee and Cycles render engines but Cycles generally produces better results without too many changes. You can change from Eevee to Cycles from the panel on the right. From the material nodes (shown in panel at the bottom), the brightness of the volume can be changed by increasing the "multiply" value. The pixel threshold can be adjusted by moving the slider points in the colour ramp node. 
+CT, dose and ROI volumes read their voxel data from external VDB files. With the default settings, saving `study.blend` keeps those files in **`study_vdb/`** beside the scene. If you imported into an unsaved scene, MedBlend copies the temporary VDBs there on the first save. **Move or share the folder together with the .blend file.**
+
+If you choose a **VDB Temp Directory** in the Medical sidebar or extension preferences, MedBlend writes the volumes there instead. Keep that directory accessible when reopening the scene. Each import creates uniquely named files.
+
+## Adjust CT and dose materials
+
+MedBlend assigns a material during import. To inspect a CT or dose volume, select it in the **Outliner**, then open **Material Properties**. A default CT import uses **Image Material**, a CT imported with a preset uses that preset’s material, and an RT Dose import uses **Dose Material**.
+
+![Material Properties for an imported volume](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/baf02ebf-5781-4c84-8884-39ff74582adf)
+
+Open the **Shading** workspace with the volume selected to edit its shader nodes. For the default materials, adjust the intensity window to isolate the values you want to display, or edit the colour ramp to change their appearance. Use **Rendered** viewport shading to inspect the result.
 
 ![materials3](https://user-images.githubusercontent.com/52724915/226318971-e3f63834-0569-43a0-8828-2ea77c7fe8cd.png)
 
@@ -145,7 +171,7 @@ This is what the mesh should look like at a threshold that isolates bone. You ca
 
 ![CT_Mesh](https://github.com/drmichaeldouglass/MedBlend/assets/52724915/c8b74c1d-baa3-4962-b29e-5eff716fb3f8)
 
-Here are some examples:
+## Example imports
 
 A CT scan, structures and dose volumes imported and overlayed. 
 
@@ -170,12 +196,12 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-Validate and build the installable extension with Blender's official commands:
+To build an installable ZIP from source, open a terminal in the directory containing `blender_manifest.toml`. Create a folder named `dist` there, then run the following with Blender 5.0 or newer on your command path.
 
 ```bash
 blender --command extension validate .
 blender --command extension build --source-dir . --output-dir dist
-blender --command extension validate dist/medblend-2.0.0.zip
+blender --command extension validate dist/medblend-2.1.0.zip
 ```
 
 Upload the archive produced by `extension build` to the Blender Extensions platform. Do not upload the repository or GitHub's generated source archive. GitHub Actions runs the unit tests and builds and validates the extension package for every push and pull request.
@@ -198,10 +224,6 @@ Upload the archive produced by `extension build` to the Blender Extensions platf
 Please report bugs through [GitHub Issues](https://github.com/drmichaeldouglass/MedBlend/issues).
 
 ## Future Updates
-
-### Import Radiation Therapy Plan Files
-
-Import radiation therapy DICOM plan files to visualise MLC or proton spot positions in the patient CT
 
 ### Import Brachytherapy Dwell Points
 

@@ -87,6 +87,9 @@ jobs:
             --background \
             --python-expr "import bpy, importlib; module = importlib.import_module('bl_ext.user_default.medblend'); assert module; assert 'bl_ext.user_default.medblend' in bpy.context.preferences.addons; import pydicom; assert pydicom.__version__ == '3.0.2', pydicom.__version__; print('MedBlend smoke test passed with pydicom', pydicom.__version__)"
 
+      - name: Check photon aperture animation in Blender
+        run: '"$BLENDER" --background --python-exit-code 1 --python tests/blender_photon_animation.py'
+
       - name: Audit archive contents
         run: |
           python - <<'PY'
