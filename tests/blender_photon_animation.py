@@ -80,6 +80,15 @@ def write_plan(path, uid):
         Modality="RTPLAN",
         RTPlanGeometry="PATIENT",
         BeamSequence=[beam, second],
+        FractionGroupSequence=[
+            dataset(
+                FractionGroupNumber=1,
+                ReferencedBeamSequence=[
+                    dataset(ReferencedBeamNumber=1, BeamMeterset=25),
+                    dataset(ReferencedBeamNumber=2, BeamMeterset=75),
+                ],
+            )
+        ],
         PatientSetupSequence=[
             dataset(PatientSetupNumber=1, PatientPosition="HFS"),
             dataset(PatientSetupNumber=2, PatientPosition="FFS"),
@@ -96,7 +105,8 @@ def near(actual, expected):
 
 def check_animation(scene, ct):
     iso = Vector((0.1, 0.2, 0.3))
-    beam, second = bpy.data.collections["Photon Plan Geometry"].children
+    children = bpy.data.collections["Photon Plan Geometry"].children
+    beam, second = children["Beam 1"], children["Beam 2"]
     a = beam.objects["MLCX A001"]
     b = beam.objects["MLCX B002"]
     y = second.objects["MLCY A001"]
@@ -142,6 +152,35 @@ def check_animation(scene, ct):
     )
 
 
+def check_fluence(scene, ct):
+    from bl_ext.user_default.medblend.volume_utils import _import_openvdb_module
+
+    vdb = _import_openvdb_module()
+    snapshots = bpy.data.collections["Cumulative Photon Fluence"].objects
+    assert len(snapshots) == 2
+    for frame, visible, expected in [
+        (1, 0, 0),
+        (32, 1, 0.25 * 0.625),
+        (62, 1, 0.625),
+        (34, 1, 0.25 * 0.625),
+    ]:
+        scene.frame_set(frame)
+        displayed = [obj for obj in snapshots if not obj.hide_render]
+        assert len(displayed) == visible
+        assert all(obj.hide_viewport == obj.hide_render for obj in snapshots)
+        if displayed:
+            obj = displayed[0]
+            assert obj.parent == ct and obj.active_material is not None
+            grid = vdb.read(bpy.path.abspath(obj.data.filepath), "density")
+            # Locate the DICOM isocentre in the on-disk grid via the moved CT
+            # and Blender object, independently of the projector's array indices.
+            local = obj.matrix_world.inverted() @ (
+                ct.matrix_world @ Vector((0.1, 0.2, 0.3))
+            )
+            ijk = tuple(round(v) for v in grid.transform.worldToIndex(tuple(local)))
+            assert abs(grid.getAccessor().getValue(ijk) - expected) < 0.01
+
+
 with tempfile.TemporaryDirectory() as directory:
     scene = bpy.context.scene
     uid = generate_uid()
@@ -156,9 +195,12 @@ with tempfile.TemporaryDirectory() as directory:
     bpy.context.view_layer.update()
     plan_path = Path(directory) / "test-plan.dcm"
     write_plan(plan_path, uid)
-    assert bpy.ops.medblend.load_photon(filepath=str(plan_path)) == {"FINISHED"}
+    assert bpy.ops.medblend.load_photon(
+        filepath=str(plan_path), fluence=True, snapshots=3, voxel_mm=6
+    ) == {"FINISHED"}
     assert bpy.ops.medblend.load_proton.get_rna_type()
     check_animation(scene, ct)
+    check_fluence(scene, ct)
     # Check the saved rig after re-opening and moving the CT again.
     blend_path = str(Path(directory) / "plan.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend_path)
@@ -166,5 +208,6 @@ with tempfile.TemporaryDirectory() as directory:
     ct = bpy.data.objects["Test CT"]
     ct.location.y += 1
     check_animation(bpy.context.scene, ct)
+    check_fluence(bpy.context.scene, ct)
 
 print("Photon aperture animation passed")

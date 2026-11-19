@@ -253,6 +253,13 @@ def _new_object(collection, name, parent=None, mesh=None):
     return obj
 
 
+def _setup_rotation(setup):
+    setup_rotation = Matrix.Rotation(math.radians(_SETUP_ROLL[setup[2:]]), 4, "Z")
+    if setup.startswith("FF"):
+        setup_rotation = setup_rotation @ Matrix.Rotation(math.pi, 4, "Y")
+    return setup_rotation
+
+
 def _build_beam(
     collection, mesh, devices, points, setup, frames, ct, patient_to_world, visibility
 ):
@@ -264,9 +271,7 @@ def _build_beam(
         _animate_axis(
             iso, "location", axis, frames, (p.isocentre[axis] / 1000 for p in points)
         )
-    setup_rotation = Matrix.Rotation(math.radians(_SETUP_ROLL[setup[2:]]), 4, "Z")
-    if setup.startswith("FF"):
-        setup_rotation = setup_rotation @ Matrix.Rotation(math.pi, 4, "Y")
+    setup_rotation = _setup_rotation(setup)
     iso.rotation_euler = setup_rotation.to_euler()
 
     couch = _new_object(collection, "Patient support", iso)
@@ -319,6 +324,16 @@ def _build_beam(
                     _curve(leaf, prop, 0, times, hidden, "CONSTANT")
 
 
+def _beam_frames(points, frame):
+    frames = [frame]
+    for previous, current in zip(points, points[1:], strict=False):
+        sweep = max(
+            abs(a - b) for a, b in zip(previous.angles, current.angles, strict=True)
+        )
+        frames.append(frames[-1] + max(4, math.ceil(sweep / 3)))
+    return frames
+
+
 def _build_plan(plan, mesh, beams, ct, transform, frame):
     mesh.from_pydata(
         [(-0.5, -0.5, 0), (0.5, -0.5, 0), (0.5, 0.5, 0), (-0.5, 0.5, 0)],
@@ -328,12 +343,7 @@ def _build_plan(plan, mesh, beams, ct, transform, frame):
     for i, (label, devices, points, setup) in enumerate(beams):
         collection = bpy.data.collections.new(label)
         plan.children.link(collection)
-        frames = [frame]
-        for previous, current in zip(points, points[1:], strict=False):
-            sweep = max(
-                abs(a - b) for a, b in zip(previous.angles, current.angles, strict=True)
-            )
-            frames.append(frames[-1] + max(4, math.ceil(sweep / 3)))
+        frames = _beam_frames(points, frame)
         visibility = []
         if i:
             visibility.extend([(frame - 1, True), (frame, False)])
@@ -347,7 +357,7 @@ def _build_plan(plan, mesh, beams, ct, transform, frame):
     return frame - 1
 
 
-def load_photon_plan(file_path: Path) -> bool:
+def load_photon_plan(file_path: Path, *, fluence=False, voxel_mm=6.0, snapshots=48) -> bool:
     try:
         ds = pydicom.dcmread(file_path)
     except Exception as exc:
@@ -371,6 +381,7 @@ def load_photon_plan(file_path: Path) -> bool:
 
     warnings = []
     beams = []
+    source_beams = []
     for i, beam in enumerate(ds.BeamSequence, 1):
         label = f"Beam {getattr(beam, 'BeamNumber', i)} {getattr(beam, 'BeamName', '')}".strip()
         if getattr(beam, "TreatmentDeliveryType", "") in (
@@ -398,6 +409,7 @@ def load_photon_plan(file_path: Path) -> bool:
             continue
         warnings.extend(f"{label}: {note}" for note in notes)
         beams.append((label, devices, points, setup))
+        source_beams.append(beam)
 
     if not beams:
         show_message_box(
@@ -443,6 +455,15 @@ def load_photon_plan(file_path: Path) -> bool:
             f"Could not build photon animation: {exc}", "Photon Plan", "ERROR"
         )
         return False
+
+    if fluence:
+        from .photon_fluence import build_fluence
+
+        try:
+            build_fluence(ds, source_beams, beams, plan, ct, transform, scene.frame_start,
+                          last_frame, voxel_mm, snapshots)
+        except Exception as exc:
+            warnings.insert(0, f"Fluence volume skipped: {exc}")
 
     scene.frame_end = max(scene.frame_end, last_frame)
     scene.frame_set(scene.frame_start)

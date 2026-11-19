@@ -316,8 +316,32 @@ class MEDBLEND_OT_Load_Photon(bpy.types.Operator, ImportHelper):
     bl_options = {"REGISTER", "UNDO"}
     filter_glob: bpy.props.StringProperty(default="*", options={"HIDDEN"})
 
+    fluence: bpy.props.BoolProperty(
+        name="Animate Cumulative Fluence",
+        description="Bake a meterset-weighted volume from the apertures to isocentre",
+        default=False,
+    )
+    voxel_mm: bpy.props.FloatProperty(
+        name="Fluence Voxel Size (mm)", default=6, min=1, max=25,
+        description="Smaller voxels resolve finer apertures and take more memory",
+    )
+    snapshots: bpy.props.IntProperty(
+        name="Maximum Fluence Frames", default=48, min=2, max=240,
+        description="Maximum number of cumulative states displayed across the plan",
+    )
+
+    def draw(self, _context):
+        self.layout.prop(self, "fluence")
+        if self.fluence:
+            self.layout.prop(self, "voxel_mm")
+            self.layout.prop(self, "snapshots")
+
     def execute(self, _context):
-        return _run_import(self, load_photon_plan)
+        if not self.fluence:
+            return _run_import(self, load_photon_plan)
+        return _run_import(self, lambda path: load_photon_plan(
+            path, fluence=True, voxel_mm=self.voxel_mm, snapshots=self.snapshots
+        ))
 
 
 class MEDBLEND_OT_Load_Proton(bpy.types.Operator, ImportHelper):
