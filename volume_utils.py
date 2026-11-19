@@ -31,9 +31,16 @@ def _get_vdb_temp_dir() -> Optional[Path]:
         if not addon:
             return None
         prefs = addon.preferences
-        if not getattr(prefs, "vdb_temp_dir", ""):
+        raw_dir = getattr(prefs, "vdb_temp_dir", "")
+        if not raw_dir:
             return None
-        resolved = bpy.path.abspath(prefs.vdb_temp_dir)
+        # A blend-relative ("//") directory has nothing to be relative to
+        # until the scene is saved. bpy.path.abspath would then hand back a
+        # path relative to Blender's working directory, and the volumes
+        # written there are lost as soon as that directory changes.
+        if raw_dir.startswith("//") and not getattr(bpy.data, "filepath", ""):
+            return None
+        resolved = bpy.path.abspath(raw_dir)
         return Path(resolved)
     except Exception:
         # Preferences are unavailable in some background/headless contexts.
@@ -444,13 +451,44 @@ def _import_openvdb_module():
     ) from last_exc
 
 
+def _new_float_grid(openvdb, background: float):
+    """Create a ``FloatGrid`` whose background value is ``background``.
+
+    The constructor argument and the ``background`` property are both tried
+    because the OpenVDB Python bindings Blender ships have changed over time.
+    A build offering neither still gets a usable grid, with OpenVDB's default
+    background of zero.
+    """
+
+    if background == 0.0:
+        return openvdb.FloatGrid()
+    try:
+        return openvdb.FloatGrid(background)
+    except Exception:
+        grid = openvdb.FloatGrid()
+        try:
+            grid.background = background
+        except Exception:
+            pass
+        return grid
+
+
 def write_vdb_volume(
     array,
     spacing: Sequence[float],
     target_name: str,
     on_error: Optional[Callable[[str], None]] = None,
+    background: float = 0.0,
 ) -> Optional[Tuple[Path, bpy.types.Object]]:
     """Write ``array`` to a VDB file and return ``(path, imported object)``.
+
+    ``background`` is the value the grid reports everywhere outside the
+    array, and voxels equal to it are stored as inactive. Zero suits dose and
+    structure masks. A CT is in Hounsfield units, where zero is water: left at
+    zero, the air at the edge of the scan borders a background denser than
+    itself, so samples interpolated across the boundary and a Volume to Mesh
+    threshold below zero both produce a shell on the faces of the bounding
+    box. Passing the lowest value in the volume avoids that.
 
     ``on_error`` receives the failure message instead of a popup being shown.
     A caller importing many volumes in a loop - one per ROI of a structure set
@@ -478,6 +516,12 @@ def write_vdb_volume(
         return fail(f"Voxel data could not be converted for VDB export: {exc}")
     if voxels.ndim != 3 or voxels.size == 0:
         return fail(f"Expected a non-empty 3D voxel array, got shape {tuple(voxels.shape)}.")
+    try:
+        background = float(background)
+    except (TypeError, ValueError):
+        background = 0.0
+    if not np.isfinite(background):
+        background = 0.0
 
     try:
         openvdb = _import_openvdb_module()
@@ -485,11 +529,11 @@ def write_vdb_volume(
         return fail(f"openvdb is not available: {exc}", "Missing Dependency")
 
     try:
-        grid = openvdb.FloatGrid()
+        grid = _new_float_grid(openvdb, background)
         grid.copyFromArray(voxels)
-        # copyFromArray activates every voxel, including the empty background
-        # that dominates structure masks and air around a CT. Pruning collapses
-        # those uniform regions, which shrinks the file and speeds up rendering.
+        # Pruning collapses uniform regions - the empty space that dominates
+        # structure masks and the air around a CT - into tiles, which shrinks
+        # the file and speeds up rendering.
         try:
             grid.prune(0.0)
         except Exception:

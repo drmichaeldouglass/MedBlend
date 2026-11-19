@@ -59,10 +59,11 @@ def stub_volume_writer(monkeypatch):
 
     created = []
 
-    def fake_write(array, _spacing, target_name, on_error=None):
+    def fake_write(array, _spacing, target_name, on_error=None, background=0.0):
         obj = FakeVolumeObject(Path(target_name).stem)
         # Kept so a test can check what would have been written to the grid.
         obj.voxels = array
+        obj.background = background
         created.append(obj)
         return Path(target_name), obj
 

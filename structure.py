@@ -16,6 +16,7 @@ from .dicom_util import (
     validate_slice_positions,
 )
 from .node_groups import apply_structure_material
+from .presets import srgb_to_linear
 from .ui_utils import show_message_box
 from .volume_utils import (
     align_object_to_ct_frame,
@@ -489,6 +490,21 @@ def _roi_display_color(roi_contour: pydicom.Dataset) -> tuple[float, float, floa
     return (values[0] / 255.0, values[1] / 255.0, values[2] / 255.0, 1.0)
 
 
+def _scene_linear_color(
+    color: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Convert an sRGB display colour to Blender's scene-linear space.
+
+    ``ROIDisplayColor`` holds the display-referred values the planning system
+    shows on screen, while object and shader colours in Blender are
+    scene-linear. Written across unconverted, every mid-tone renders too
+    bright and desaturated - an orange (255, 128, 0) comes out yellow.
+    """
+
+    red, green, blue = (srgb_to_linear(min(max(value, 0.0), 1.0)) for value in color[:3])
+    return (red, green, blue, color[3])
+
+
 def crop_mask_to_bounds(
     mask: np.ndarray, geometry
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -659,7 +675,7 @@ def load_structures(file_path: Path) -> bool:
 
     try:
         roi_masks = iter_roi_masks(dicom_structure, geometry)
-        for roi_name, mask, color, skipped in roi_masks:
+        for roi_name, mask, display_color, skipped in roi_masks:
             skipped_contours += skipped
             if mask is None:
                 empty_names.append(roi_name)
@@ -680,6 +696,9 @@ def load_structures(file_path: Path) -> bool:
             _output_path, imported_obj = result
             _name_after_roi(imported_obj, roi_name)
 
+            # ROIDisplayColor is an sRGB display colour; Blender wants
+            # scene-linear for both the object and its material.
+            color = _scene_linear_color(display_color) if display_color else None
             if color:
                 imported_obj.color = color
             imported_obj["medblend_roi_name"] = roi_name
