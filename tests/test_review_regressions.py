@@ -23,7 +23,7 @@ def test_ct_rejects_sheared_stack_before_writing(monkeypatch, tmp_path):
     monkeypatch.setattr(ct.pydicom, "dcmread", lambda *a, **kw: slices[0])
     monkeypatch.setattr(ct, "load_dicom_series", lambda *a: slices)
     writes = []
-    monkeypatch.setattr(ct, "write_vdb_volume", lambda *a: writes.append(a))
+    monkeypatch.setattr(ct, "write_vdb_volume", lambda *a, **k: writes.append(a))
     messages = []
     monkeypatch.setattr(ct, "show_message_box", lambda *a: messages.append(a))
 

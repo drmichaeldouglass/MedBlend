@@ -93,7 +93,14 @@ def load_ct_series(
     # Named after the modality so an MR series is not labelled "CT" in the
     # outliner. check_dicom_image_type has already limited it to CT or MR.
     modality = str(getattr(selected_file, "Modality", "") or "")
-    result = write_vdb_volume(ct_volume, spacing_values, f"{modality or 'Image'}.vdb")
+    # The lowest intensity - air, in a CT - is the grid's background, so the
+    # space outside the scan reads as empty rather than as 0 HU water.
+    result = write_vdb_volume(
+        ct_volume,
+        spacing_values,
+        f"{modality or 'Image'}.vdb",
+        background=intensity_min,
+    )
     if not result:
         return False
     _output_path, ct_object = result

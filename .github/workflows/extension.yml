@@ -90,6 +90,9 @@ jobs:
       - name: Check photon aperture animation in Blender
         run: '"$BLENDER" --background --python-exit-code 1 --python tests/blender_photon_animation.py'
 
+      - name: Check image volume background in Blender
+        run: '"$BLENDER" --background --python-exit-code 1 --python tests/blender_volume_background.py'
+
       - name: Audit archive contents
         run: |
           python - <<'PY'
