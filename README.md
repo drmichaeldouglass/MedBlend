@@ -33,7 +33,7 @@ The extension package includes the `pydicom` wheel declared in `blender_manifest
 
 ## Installation
 
-Use **Blender 5.0 or newer**. For photon MLC animation, choose **MedBlend 2.1.0 or newer**. The 2.0.0 package includes the proton importer. Blender installs the bundled Python dependency when you install the extension.
+Use **Blender 5.0 or newer**. For photon MLC animation, choose **MedBlend 2.1.0 or newer**. Cumulative photon fluence is available in **2.2.0**. The 2.0.0 package includes the proton importer. Blender installs the bundled Python dependency when you install the extension.
 
 ### Get the extension ZIP
 
@@ -86,6 +86,22 @@ GitHub Actions artifacts expire. If the build download has expired, check the re
 **Geometry and timing.** MLCX and MLCY leaf widths come from adjacent DICOM leaf boundaries. The rectangular leaves have schematic outer lengths and flat tips. When both source-axis and source-to-device distances are available, MedBlend scales the aperture to the device plane. A missing device distance triggers a notice with the assumed distance. A missing source-axis distance places the aperture at isocentre. Motion interpolates linearly between control points, including zero-meterset transitions. Timeline spacing is for visual playback.
 
 **Supported setups.** Photon import supports head-first and feet-first supine, prone and decubitus setups. A missing patient position defaults to HFS with a notice. MedBlend skips beams that use enhanced beam limiting devices, gantry pitch, table pitch or roll, eccentric rotation or dynamic table translations, and reports the reason.
+
+### Animate cumulative photon fluence
+
+1. Save the scene and import the matching CT if you want to see the projection around the patient.
+2. Choose **Medical → Load Photon Plan**, enable **Animate Cumulative Fluence** in the file browser options, and select the RTPLAN. MedBlend bakes a **Cumulative Photon Fluence** collection alongside the animated beam rig.
+3. Switch to **Rendered** viewport shading and scrub the timeline. The first frame starts empty. As the leaves and gantry move, each exposed voxel accumulates fluence in patient coordinates. The last frame holds the sum for the imported photon beams in one fraction.
+
+![Animated synthetic photon arc showing the moving MLC aperture alongside an axial slice of the accumulating patient-space fluence.](.github/images/photon-fluence.gif)
+
+*The colour scale stays fixed throughout this synthetic arc. The cross marks isocentre. The image on the right is one axial slice from the calculated 3D grid.*
+
+**Fluence Voxel Size (mm)** sets spatial resolution. Start with the 6 mm preview, then reduce the spacing to resolve smaller openings. **Maximum Fluence Frames** sets how many cumulative states are displayed across the timeline, including the empty first state. More states give smoother playback and write more VDB files. The integration samples aperture motion between displayed states. Keep the VDB files with the scene as described below.
+
+Each voxel contains **relative incident fluence** from an ideal point source, projected between the downstream aperture plane and the instantaneous isocentre plane. The model intersects MLC leaf openings and jaws, applies inverse-square scaling relative to the isocentre plane and weights each interval by its change in cumulative meterset. Zero-meterset motion adds zero fluence. An always-open isocentre accumulates 1.0 over a fully exposed plan. The model omits attenuation, scatter, leaf transmission, head fluence profiles and dose deposition.
+
+A multi-beam sum requires beam metersets from a single fraction group. A single beam can use its own normalised control-point weights. If the required geometry or weights are unavailable, the importer keeps the aperture animation and reports why it skipped the volume. The beam rig’s reported assumptions about missing device distances also apply to the projection.
 
 ### Inspect a proton plan
 
@@ -201,7 +217,7 @@ To build an installable ZIP from source, open a terminal in the directory contai
 ```bash
 blender --command extension validate .
 blender --command extension build --source-dir . --output-dir dist
-blender --command extension validate dist/medblend-2.1.0.zip
+blender --command extension validate dist/medblend-2.2.0.zip
 ```
 
 Upload the archive produced by `extension build` to the Blender Extensions platform. Do not upload the repository or GitHub's generated source archive. GitHub Actions runs the unit tests and builds and validates the extension package for every push and pull request.
