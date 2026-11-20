@@ -375,7 +375,9 @@ def _build_geometry_from_contours(dicom_structure: pydicom.Dataset):
 
     rows = max(1, int(np.ceil((max_row - min_row) / row_spacing)) + 2)
     cols = max(1, int(np.ceil((max_col - min_col) / col_spacing)) + 2)
-    num_slices = max(1, int(np.ceil((max_slice - min_slice) / slice_spacing)) + 1)
+    # The planes were verified above to sit on whole multiples of the spacing,
+    # so round: ceil turns a quotient of 119.0000001 into an extra empty slice.
+    num_slices = max(1, int(np.rint((max_slice - min_slice) / slice_spacing)) + 1)
 
     origin = (
         (row_axis_dir * min_row)

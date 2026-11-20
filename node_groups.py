@@ -30,7 +30,33 @@ def _blend_library_path() -> Path:
     return Path(__file__).resolve().parent / "assets" / "MedBlend_Assets.blend"
 
 
+#: ``bpy.data`` collection holding each datablock type MedBlend appends.
+_LIBRARY_COLLECTIONS = {"Material": "materials", "NodeTree": "node_groups"}
+
+
 def append_item_from_blend(file_path: Path, item_type: str, item_name: str) -> None:
+    """Append one datablock from the asset library into the current file.
+
+    ``bpy.data.libraries.load`` is used in preference to the ``wm.append``
+    operator, which depends on the calling context: it refuses to run while an
+    object is in Edit Mode, so an import started there lost its material, and
+    it deselects everything in the scene, including the volume that was just
+    imported. The operator is kept as a fallback.
+    """
+
+    collection_name = _LIBRARY_COLLECTIONS.get(item_type)
+    libraries = getattr(bpy.data, "libraries", None)
+    if collection_name and libraries is not None and hasattr(libraries, "load"):
+        try:
+            with libraries.load(str(file_path), link=False) as (data_from, data_to):
+                if item_name in getattr(data_from, collection_name):
+                    setattr(data_to, collection_name, [item_name])
+            if getattr(bpy.data, collection_name).get(item_name) is not None:
+                return
+        except Exception:
+            # Fall through to the operator rather than give up on the asset.
+            pass
+
     directory = str(file_path / item_type)
     bpy.ops.wm.append(directory=directory + os.sep, filename=item_name)
 

@@ -8,16 +8,16 @@ from pathlib import Path
 
 import bpy
 import pydicom
-from mathutils import Matrix
 
-from .plan import IEC_BEAM_TO_DICOM, _finite_float
+from .plan import IEC_BEAM_TO_DICOM, _SETUP_ROLL, _finite_float
+from .plan import setup_rotation as _setup_rotation
 from .ui_utils import show_message_box
 from .volume_utils import ct_patient_to_world, find_ct_anchor
 
 
 # For HFS the beam basis at zero angles is (left, superior, anterior).
-# Other axial setups rotate that room basis about the patient isocentre.
-_SETUP_ROLL = {"S": 0, "P": 180, "DL": -90, "DR": 90}
+# Other axial setups rotate that room basis about the patient isocentre; the
+# rotation itself is shared with the proton importer in plan.py.
 _ANGLES = (
     ("GantryAngle", "GantryRotationDirection", "CW"),
     ("BeamLimitingDeviceAngle", "BeamLimitingDeviceRotationDirection", "CC"),
@@ -251,13 +251,6 @@ def _new_object(collection, name, parent=None, mesh=None):
     if mesh is None:
         obj.empty_display_size = 0.02
     return obj
-
-
-def _setup_rotation(setup):
-    setup_rotation = Matrix.Rotation(math.radians(_SETUP_ROLL[setup[2:]]), 4, "Z")
-    if setup.startswith("FF"):
-        setup_rotation = setup_rotation @ Matrix.Rotation(math.pi, 4, "Y")
-    return setup_rotation
 
 
 def _build_beam(

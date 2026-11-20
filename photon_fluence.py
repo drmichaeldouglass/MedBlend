@@ -297,7 +297,10 @@ def _snapshots(deliveries, grid, frames):
 
 
 def _configure_material(material):
-    material.use_nodes = True
+    # Materials always carry a node tree from Blender 5.0, where ``use_nodes``
+    # is deprecated and due for removal in 6.0.
+    if getattr(material, "node_tree", None) is None:
+        material.use_nodes = True
     tree = material.node_tree
     tree.nodes.clear()
     output = tree.nodes.new("ShaderNodeOutputMaterial")
