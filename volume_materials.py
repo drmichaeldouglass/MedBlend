@@ -283,11 +283,21 @@ def get_preset_material(
     else:
         material = bpy.data.materials.new(base_name)
 
-    build_preset_node_tree(
-        material, preset, window, data_range, density_scale, emission_strength
-    )
-    _tag_material(material, preset, window, data_range, density_scale, emission_strength)
-    material.diffuse_color = _linear_rgba(preset_lib.representative_color(preset))
+    try:
+        build_preset_node_tree(
+            material, preset, window, data_range, density_scale, emission_strength
+        )
+        _tag_material(material, preset, window, data_range, density_scale, emission_strength)
+        material.diffuse_color = _linear_rgba(preset_lib.representative_color(preset))
+    except Exception:
+        # A half-built material carries no preset tags, so it would never match
+        # a later lookup: every retry would leave another untagged copy behind
+        # under the next free name.
+        try:
+            bpy.data.materials.remove(material)
+        except Exception:
+            pass
+        raise
     return material
 
 

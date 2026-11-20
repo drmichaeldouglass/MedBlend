@@ -131,14 +131,57 @@ def _spot_control_point_data(
     return positions, weights, nominal_energy_mev / 1000.0
 
 
-def _patient_position(dataset: pydicom.Dataset) -> str:
+def _patient_position(dataset: pydicom.Dataset, beam: pydicom.Dataset | None = None) -> str:
+    """Return the patient position a beam is planned in, or ``""``.
+
+    A beam names its setup through ``ReferencedPatientSetupNumber``. Plans can
+    carry more than one setup, so reading the first item for every beam gives
+    the wrong orientation to any beam that references a later one. The first
+    setup is still the fallback for a beam with no usable reference.
+    """
+
     try:
-        setups = getattr(dataset, "PatientSetupSequence", [])
-        if setups:
-            return str(getattr(setups[0], "PatientPosition", "")).upper()
+        setups = list(getattr(dataset, "PatientSetupSequence", None) or [])
+        if not setups:
+            return ""
+        reference = getattr(beam, "ReferencedPatientSetupNumber", None) if beam is not None else None
+        chosen = setups[0]
+        if reference not in (None, ""):
+            for setup in setups:
+                number = getattr(setup, "PatientSetupNumber", None)
+                if number not in (None, "") and int(number) == int(reference):
+                    chosen = setup
+                    break
+        return str(getattr(chosen, "PatientPosition", "") or "").strip().upper()
     except Exception:
-        pass
-    return ""
+        return ""
+
+
+# IEC 61217 fixed (room) axes coincide with the head-first supine patient axes
+# used throughout this module. Every other axial setup is that frame rolled
+# about the patient's long axis, and feet-first setups are additionally turned
+# end for end about the anterior-posterior axis.
+_SETUP_ROLL = {"S": 0.0, "P": 180.0, "DL": -90.0, "DR": 90.0}
+
+
+def is_supported_setup(position: str) -> bool:
+    """``True`` for the eight axial DICOM patient positions (HFS ... FFDL)."""
+
+    return position[:2] in ("HF", "FF") and position[2:] in _SETUP_ROLL
+
+
+def setup_rotation(position: str) -> Matrix:
+    """Rotation taking head-first supine room axes to ``position``'s.
+
+    Applied on the patient side of the couch and gantry rotations, it turns a
+    beam built for an HFS patient into the same beam for a patient lying in
+    ``position``. For HFS it is the identity.
+    """
+
+    rotation = Matrix.Rotation(math.radians(_SETUP_ROLL[position[2:]]), 4, "Z")
+    if position.startswith("FF"):
+        rotation = rotation @ Matrix.Rotation(math.pi, 4, "Y")
+    return rotation
 
 
 def _radiation_type(beam: pydicom.Dataset) -> str:
@@ -287,14 +330,22 @@ def _collect_spot_groups(
 IEC_BEAM_TO_DICOM = Matrix.Rotation(math.radians(90.0), 4, "X")
 
 
-def _beam_world_matrix_from_geometry(geometry: _BeamGeometry) -> Matrix:
-    """Build a beam transform from already-resolved DICOM geometry."""
+def _beam_world_matrix_from_geometry(
+    geometry: _BeamGeometry, patient_setup: Matrix | None = None
+) -> Matrix:
+    """Build a beam transform from already-resolved DICOM geometry.
+
+    ``patient_setup`` is :func:`setup_rotation` for the beam's patient
+    position; leaving it out places the beam for a head-first supine patient.
+    """
 
     rotation = (
         Matrix.Rotation(math.radians(geometry.couch_angle), 4, "Y")
         @ Matrix.Rotation(math.radians(geometry.gantry_angle), 4, "Z")
         @ IEC_BEAM_TO_DICOM
     )
+    if patient_setup is not None:
+        rotation = patient_setup @ rotation
     translation = tuple(value / 1000.0 for value in geometry.isocenter_mm)
     return Matrix.Translation(translation) @ rotation
 
@@ -302,7 +353,9 @@ def _beam_world_matrix_from_geometry(geometry: _BeamGeometry) -> Matrix:
 def _beam_world_matrix(control_point: pydicom.Dataset) -> Matrix:
     """Build the beam object's world matrix in DICOM patient coordinates.
 
-    Assumes a head-first supine (HFS) patient. The IEC gantry rotation axis is
+    Describes a head-first supine (HFS) patient; other setups are handled by
+    the ``patient_setup`` rotation of
+    :func:`_beam_world_matrix_from_geometry`. The IEC gantry rotation axis is
     then the patient superior-inferior axis (DICOM +Z), and the couch
     (PatientSupportAngle) turns the beam about the room-vertical axis, which
     lies along DICOM Y. Composing couch after gantry reproduces the standard
@@ -335,11 +388,6 @@ def load_proton_plan(file_path: Path) -> bool:
         return False
 
     warnings: list[str] = []
-    patient_position = _patient_position(dataset)
-    if patient_position and patient_position != "HFS":
-        warnings.append(
-            f"Patient position is {patient_position}; beam orientation assumes HFS."
-        )
 
     # Beams are placed in DICOM patient coordinates. Dose and structures go
     # through the matching CT so they follow it after the user has moved it;
@@ -377,6 +425,18 @@ def load_proton_plan(file_path: Path) -> bool:
             warnings.append(f"Beam {beam_index} did not contain any valid scan spot data.")
             continue
 
+        # Gantry and couch angles are room angles, so the patient's setup
+        # decides which way round the room sits in patient coordinates.
+        patient_position = _patient_position(dataset, beam)
+        patient_setup = None
+        if is_supported_setup(patient_position):
+            patient_setup = setup_rotation(patient_position)
+        elif patient_position:
+            warnings.append(
+                f"Beam {beam_index} has unsupported patient position "
+                f"{patient_position}; its orientation assumes HFS."
+            )
+
         beam_name = str(getattr(beam, "BeamName", "") or "")
         try:
             beam_number = int(getattr(beam, "BeamNumber", beam_index))
@@ -411,7 +471,7 @@ def load_proton_plan(file_path: Path) -> bool:
                 continue
 
             obj = create_object(mesh, mesh.name)
-            beam_matrix = _beam_world_matrix_from_geometry(group.geometry)
+            beam_matrix = _beam_world_matrix_from_geometry(group.geometry, patient_setup)
             obj.matrix_world = (
                 beam_matrix if patient_to_world is None else patient_to_world @ beam_matrix
             )
